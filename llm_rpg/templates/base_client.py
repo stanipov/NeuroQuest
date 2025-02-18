@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 
 
 class BaseClient(ABC):
@@ -26,7 +26,7 @@ class BaseClient(ABC):
         self.model_name = model_name
 
     @abstractmethod
-    def chat(self, messages: List[Dict[Any, Any]]) -> Any:
+    def chat(self, messages: List[Dict[Any, Any]], *arg, **kwargs) -> Any:
         """
         Sends messages to an LLM instance for processing.
 

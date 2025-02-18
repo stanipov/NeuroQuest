@@ -17,6 +17,13 @@ class GroqW(BaseClient):
         return self.client
 
     def chat(self, messages: List[Dict[Any, Any]], *args, **kwargs) -> ChatCompletion:
+        """
+        response.choices[0].message.content
+        :param messages:
+        :param args:
+        :param kwargs:
+        :return:
+        """
         return self.client.chat.completions.create(messages=messages,
                                                    model=self.model_name,
                                                    **kwargs)

@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 from ollama import ChatResponse, GenerateResponse
 from ollama import Client
 from ..templates.base_client import BaseClient
@@ -22,9 +22,19 @@ class OllamaW(BaseClient):
         self.client = Client(self.host)
         return self.client
 
-    def chat(self, messages: List[Dict[Any, Any]]) -> ChatResponse:
+    def chat(self, messages: List[Dict[Any, Any]],
+             options:Union[Any,Dict[Any,Any]]=None) -> ChatResponse:
+        """
+        response.message.content
+        :param messages:
+        :return:
+        """
+        if options is None:
+            opts = self.model_options
+        else:
+            opts = options
         return self.client.chat(model=self.model_name,
-                           options=self.model_options,
+                           options=opts,
                            messages=messages
                            )
 

@@ -1,6 +1,7 @@
 # Local data not to be commited
 course/
 notebooks/
+data_ignore/
 .tmp/
 usefull_links
 
