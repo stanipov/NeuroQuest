@@ -29,7 +29,7 @@ class GroqW(BaseClient):
         if 'temperature' in kwargs:
             temp = kwargs.pop('temperature')
         else:
-            temp = self._t
+            temp = self._T
         return self.client.chat.completions.create(messages=messages,
                                                    model=self.model_name,
                                                    temperature=temp,

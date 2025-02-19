@@ -67,7 +67,7 @@ def parse_towns(loc_response: str, expected_fields: Union[List[str], Set[str]]) 
                         fld, s = x.split(':')
                         fld = fld.replace('\'', '')
                         if fld in expected_fields:
-                            locations[_name][fld] = s
+                            locations[_name][fld] = s.strip()
                     except Exception as e:
                         pass
 

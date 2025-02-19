@@ -35,7 +35,7 @@ Many gods rule over the world. They are lazy, self-centered, and do not care muc
 creatures living on the Discworld. Occasionally they intervene, but things never go well \
 when the do it."""
 ########################################################################################################################
-def gen_world_prompt(world_desc:str)-> List[Dict[str, str]]:
+def gen_world_msgs(world_desc:str)-> List[Dict[str, str]]:
     """
     Returns a prompt to generate world description.
 
@@ -65,7 +65,7 @@ World Description: <WORLD DESCRIPTION>"""
     ]
 
 
-def gen_kindgom_gen_prompt(num_kingdoms:int,
+def gen_kingdom_msgs(num_kingdoms:int,
                            kingdoms_traits:str,
                            world:Dict[str,str]) -> List[Dict[str, str]]:
     """
@@ -91,8 +91,8 @@ information. You follow following instructions:
 
     s = ""
     for i in range(num_kingdoms):
-        s += f"""Kingdome {i + 1}: <kingdome name>
-history: brief history of the kingdome, (1 sentence, 10 words)
+        s += f"""Kingdom {i + 1}: <kingdom name>
+history: brief history of the kingdom, (1 sentence, 10 words)
 type: one of the kingdom generic descriptions, one word
 location: up to 1 sentence
 political_system: up to five words
@@ -120,7 +120,7 @@ It is very important that your output strictly follows this template:
         {"role": "user", "content": kingdoms_prompt}]
 
 
-def gen_towns_prompt(num_towns, world, kingdoms, kingdom_name):
+def gen_towns_msgs(num_towns, world, kingdoms, kingdom_name):
     """
     Generates towns in a kingdom
     """
@@ -157,4 +157,4 @@ to create {num_towns} different towns for a fantasy kingdom and world using this
 
     return [
         {"role": "system", "content": system_prompt_towns},
-        {"role": "user", "content":  gen_towns_prompt(num_towns, world, kingdoms, kingdom_name)}]
+        {"role": "user", "content":  town_prompt}]
