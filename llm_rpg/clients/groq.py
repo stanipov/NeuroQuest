@@ -27,10 +27,12 @@ class GroqW(BaseClient):
         :return:
         """
         if 'temperature' in kwargs:
-            self._T = kwargs.pop('temperature')
+            temp = kwargs.pop('temperature')
+        else:
+            temp = self._t
         return self.client.chat.completions.create(messages=messages,
                                                    model=self.model_name,
-                                                   temperature=self._T,
+                                                   temperature=temp,
                                                    **kwargs)
 
     def stream(self, messages: List[Dict[Any, Any]], *args, **kwargs) -> ChatCompletion:
