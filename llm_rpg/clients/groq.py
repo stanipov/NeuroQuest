@@ -6,10 +6,12 @@ from groq.types.chat import ChatCompletion
 class GroqW(BaseClient):
     def __init__(self, model_name,
                  api_key:str,
-                 *args):
+                 *args, **kwargs):
         self.model_name = model_name
         self.__api_key = api_key
         self.client = Groq(api_key=self.__api_key)
+        if 'temperature' in kwargs:
+            self._T = kwargs['temperature']
 
     def set_model(self, model_name):
         self.model_name = model_name
@@ -24,8 +26,11 @@ class GroqW(BaseClient):
         :param kwargs:
         :return:
         """
+        if 'temperature' in kwargs:
+            self._T = kwargs.pop('temperature')
         return self.client.chat.completions.create(messages=messages,
                                                    model=self.model_name,
+                                                   temperature=self._T,
                                                    **kwargs)
 
     def stream(self, messages: List[Dict[Any, Any]], *args, **kwargs) -> ChatCompletion:
