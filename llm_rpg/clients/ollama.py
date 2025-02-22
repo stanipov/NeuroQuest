@@ -27,16 +27,33 @@ class OllamaW(BaseClient):
         """
         response.message.content
         :param messages:
-        :return:
+        :return: Dict[str, Any] -> {
+                "message": LLM reponse,
+                "stats": {
+                    'promt_tokens': count of prompt tokens
+                    'promt_eval_duration': prompt evaluation duration in ms,
+                    'eval_tokens': count of response tokens,
+                    'eval_duration': generation duration in ms
+                }
+            }
         """
         if options is None:
             opts = self.model_options
         else:
             opts = options
-        return self.client.chat(model=self.model_name,
+        raw_response =  self.client.chat(model=self.model_name,
                            options=opts,
-                           messages=messages
-                           )
+                           messages=messages)
+        response = {
+            'message': raw_response.message.content,
+            'stats': {
+                'promt_tokens': raw_response.prompt_eval_count,
+                'promt_eval_duration': raw_response.prompt_eval_duration/10**6,
+                'eval_tokens': raw_response.eval_count,
+                'eval_duration': raw_response.eval_duration/10**6
+            }
+        }
+        return response
 
     def stream(self, messages: List[Dict[Any, Any]]) -> GenerateResponse:
         """

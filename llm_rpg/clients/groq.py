@@ -24,16 +24,37 @@ class GroqW(BaseClient):
         :param messages:
         :param args:
         :param kwargs:
-        :return:
+        :return: Dict[str, Any] -> {
+                "message": LLM reponse,
+                "stats": {
+                    'promt_tokens': count of prompt tokens
+                    'promt_eval_duration': prompt evaluation duration in ms,
+                    'eval_tokens': count of response tokens,
+                    'eval_duration': generation duration in ms
+                }
+            }
         """
         if 'temperature' in kwargs:
             temp = kwargs.pop('temperature')
         else:
             temp = self._T
-        return self.client.chat.completions.create(messages=messages,
+
+        raw_response = self.client.chat.completions.create(messages=messages,
                                                    model=self.model_name,
                                                    temperature=temp,
                                                    **kwargs)
+
+        response = {
+            'message': raw_response.choices[0].message.content,
+            "stats": {
+                'promt_tokens': raw_response.usage.prompt_tokens,
+                'promt_eval_duration': raw_response.usage.prompt_time*1000,
+                'eval_tokens': raw_response.usage.completion_tokens,
+                'eval_duration': raw_response.usage.completion_time*1000,
+                }
+        }
+
+        return response
 
     def stream(self, messages: List[Dict[Any, Any]], *args, **kwargs) -> ChatCompletion:
         """

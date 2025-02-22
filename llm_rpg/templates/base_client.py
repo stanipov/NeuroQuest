@@ -31,7 +31,16 @@ class BaseClient(ABC):
         Sends messages to an LLM instance for processing.
 
         :param messages: A list of message dictionaries, each containing a 'content' key.
-        :return: Returns the raw output
+        :return: Dict[str, Any] ->
+            response = {
+                "message": LLM reponse,
+                "stats": {
+                    'promt_tokens': count of prompt tokens
+                    'promt_eval_duration': prompt evaluation duration in ms,
+                    'eval_tokens': count of response tokens,
+                    'eval_duration': generation duration in ms
+                }
+            }
         """
 
     @abstractmethod
