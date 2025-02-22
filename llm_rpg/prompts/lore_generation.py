@@ -16,7 +16,8 @@ what's happening till it's too late.
 are known for mass production and highly educated people. Their armies are strong and fearsome, but they \
 are not interested in conquests, they want trade and earn money."""
 
-world_desc = """This is Discworld similar to one of Terry Pratchett's one. \
+# Inspired by Terry Pratchett
+world_desc_discworld = """This is Discworld similar to one of Terry Pratchett's one. \
 This is a flat world. Sun orbits around the disc. There are long summers and \
 long and harsh winters. The center region of the Discworld has no seas and oceans, \
 it's dry and deserted. The outer part has seas and oceans. They make the climate mild.
@@ -34,6 +35,16 @@ dragons.
 Many gods rule over the world. They are lazy, self-centered, and do not care much about \
 creatures living on the Discworld. Occasionally they intervene, but things never go well \
 when the do it."""
+
+# Something grim, work in progress
+world_desc_grim = """- This is fantasy world where magic is strong.
+- The world is inherently unfriendly place.
+- Climate is good in the South, but more northern regions are harsher.
+- The world has long winters and summers, which change relatively fast.
+- Many creatures are indifferent to humans, but some are very unfriendly.
+- The world is populated with humans, elves, trolls,  goblins, dragons.
+- Gods are present, but they are lazy, self-centered, arrogant, and cruel. The gods are not very powerful.
+- There several large continents, but people have very vague knowledge of other continents."""
 ########################################################################################################################
 def gen_world_msgs(world_desc:str)-> List[Dict[str, str]]:
     """
@@ -86,8 +97,7 @@ information. You follow following instructions:
 - Use simple clear language without being flowery.
 - You must provide short answers.
 - You strictly follow your instructions.
-- You never add anything from yourself.
-    """
+- You never add anything from yourself."""
 
     s = ""
     for i in range(num_kingdoms):
