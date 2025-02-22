@@ -25,7 +25,7 @@ class GroqW(BaseClient):
         :param args:
         :param kwargs:
         :return: Dict[str, Any] -> {
-                "message": LLM reponse,
+                "message": LLM response,
                 "stats": {
                     'promt_tokens': count of prompt tokens
                     'promt_eval_duration': prompt evaluation duration in ms,
