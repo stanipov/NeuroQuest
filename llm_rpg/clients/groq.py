@@ -2,6 +2,8 @@ from typing import List, Dict, Any
 from groq import Groq
 from ..templates.base_client import BaseClient
 from groq.types.chat import ChatCompletion
+import logging
+logger = logging.getLogger(__name__)
 
 class GroqW(BaseClient):
     def __init__(self, model_name,
@@ -18,7 +20,7 @@ class GroqW(BaseClient):
         self.client = Groq(api_key=self.__api_key)
         return self.client
 
-    def chat(self, messages: List[Dict[Any, Any]], *args, **kwargs) -> ChatCompletion:
+    def chat(self, messages: List[Dict[Any, Any]], *args, **kwargs) -> Dict[str, Any]:
         """
         response.choices[0].message.content
         :param messages:
@@ -38,7 +40,9 @@ class GroqW(BaseClient):
             temp = kwargs.pop('temperature')
         else:
             temp = self._T
-
+        # exclude possible streaming
+        if "stream" in kwargs:
+            _ = kwargs.pop('stream')
         raw_response = self.client.chat.completions.create(messages=messages,
                                                    model=self.model_name,
                                                    temperature=temp,

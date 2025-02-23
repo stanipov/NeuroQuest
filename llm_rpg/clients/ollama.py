@@ -2,6 +2,8 @@ from typing import List, Dict, Any, Union
 from ollama import ChatResponse, GenerateResponse
 from ollama import Client
 from ..templates.base_client import BaseClient
+import logging
+logger = logging.getLogger(__name__)
 
 class OllamaW(BaseClient):
     def __init__(self, model_name,
@@ -23,7 +25,7 @@ class OllamaW(BaseClient):
         return self.client
 
     def chat(self, messages: List[Dict[Any, Any]],
-             options:Union[Any,Dict[Any,Any]]=None) -> ChatResponse:
+             **kwargs) -> Dict[str, Any]:
         """
         response.message.content
         :param messages:
@@ -37,6 +39,7 @@ class OllamaW(BaseClient):
                 }
             }
         """
+        options = kwargs.get('options', None)
         if options is None:
             opts = self.model_options
         else:
