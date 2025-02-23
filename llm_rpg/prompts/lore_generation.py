@@ -4,8 +4,25 @@ Collection of prompts to generate the world and the lore
 from ..utils.helpers import dict_2_str
 
 from typing import Dict, List, Set, Any
+
+
 ########################################################################################################################
-# Set of default prompts
+# default descriptions
+KINGDOM_DESC_STRUCT= {
+    "history": "brief history of the kingdom, (1 sentence, 10 words)",
+    "type": "one of the kingdom generic descriptions, one word",
+    "location": "up to 1 sentence",
+    "political_system": "up to five words",
+    "national_wealth": "up to ten words",
+    "international": "interaction with neighbors (include for each kingdom), up to one sentence, 10 words",
+}
+
+TOWNS_DESC_STRUCT = {
+    "history": "brief history of the town, (1 sentence, max 10 words)",
+    "location": "geographical location of the town in the kingdom, up to 10 words",
+    "important_places": "important places in the town, up to 1 sentence, max 10 words",
+}
+
 kingdoms_traits = """The world has many kingdoms. They can be very different:
 1. magic, they rely on solving their problems on magic. Magicians are very respected
 2. militaristic, they have very strong armies, excell in warfare, tactics. They can be very aggressive towards \
@@ -16,6 +33,7 @@ what's happening till it's too late.
 are known for mass production and highly educated people. Their armies are strong and fearsome, but they \
 are not interested in conquests, they want trade and earn money."""
 
+# World descriptions
 # Inspired by Terry Pratchett
 world_desc_discworld = """This is Discworld similar to one of Terry Pratchett's one. \
 This is a flat world. Sun orbits around the disc. There are long summers and \
@@ -27,7 +45,7 @@ happen there, e.g. a reverse pyramid. Humans domesticated magic, and these peopl
 are magicians. 
 
 Light travels very slowly when meets a strong magical field. There is a special color \
-for magic: octarin.
+for magic: octarine.
 
 The world is populated by different fairy creatures, such as elves, goblins, trolls, \
 dragons. 
@@ -46,21 +64,29 @@ world_desc_grim = """- This is fantasy world where magic is strong.
 - Gods are present, but they are lazy, self-centered, arrogant, and cruel. The gods are not very powerful.
 - There several large continents, but people have very vague knowledge of other continents."""
 ########################################################################################################################
-def gen_world_msgs(world_desc:str)-> List[Dict[str, str]]:
+# Set of default prompts
+
+# Generic system prompt for lore generation
+LORE_GEN_SYS_PRT = """You are AI Game Master who plans and outlines RPG \
+game mechanics and game worlds. Your job is to help to create \
+interesting fantasy worlds that players would love to play in.
+
+Your answers shall be very short and outline only important \
+information. You follow following instructions:
+- Only generate in plain text without formatting.
+- Use simple clear language without being flowery.
+- You strictly follow your instructions.
+- You never add anything from yourself.
+- You must stay below 3-5 sentences for each description."""
+
+########################################################################################################################
+def gen_world_msgs(world_desc:str) -> List[Dict[str, str]]:
     """
     Returns a prompt to generate world description.
 
     :param world_desc: string describing some world peculiarities
     :return:
     """
-    world_system_prompt = """Your job is to help create \
-interesting fantasy worlds that players would \
-love to play in.
-Instructions:
-- Only generate in plain text without formatting.
-- Use simple clear language without being flowery.
-- You must stay below 3-5 sentences for each description.
-- You never respond with a markdown, only plain text as instructed."""
 
     world_prompt = f"""Generate a creative description of a unique fantasy world. Be poetic. \
 These are world properties:
@@ -71,14 +97,14 @@ World Name: <WORLD NAME>
 World Description: <WORLD DESCRIPTION>"""
 
     return [
-        {"role": "system", "content": world_system_prompt},
+        {"role": "system", "content": LORE_GEN_SYS_PRT},
         {"role": "user", "content": world_prompt}
     ]
 
 
 def gen_kingdom_msgs(num_kingdoms:int,
-                           kingdoms_traits:str,
-                           world:Dict[str,str]) -> List[Dict[str, str]]:
+                     kingdoms_traits:str,
+                     world:Dict[str,str]) -> List[Dict[str, str]]:
     """
     Returns a prompt to generate kingdoms
 
@@ -87,29 +113,13 @@ def gen_kingdom_msgs(num_kingdoms:int,
     :param world: world description
     :return:
     """
-    system_prompt_k = """You are AI Game Master who plans and outlines RPG \
-game mechanics and game worlds. Your job is to help to create \
-interesting fantasy worlds that players would love to play in.
-
-Your answers shall be very short and outline only important \
-information. You follow following instructions:
-- Only generate in plain text without formatting.
-- Use simple clear language without being flowery.
-- You must provide short answers.
-- You strictly follow your instructions.
-- You never add anything from yourself."""
 
     s = ""
     for i in range(num_kingdoms):
-        s += f"""Kingdom {i + 1}: <kingdom name>
-history: brief history of the kingdom, (1 sentence, 10 words)
-type: one of the kingdom generic descriptions, one word
-location: up to 1 sentence
-political_system: up to five words
-national_wealth: up to ten words
-international: interaction with neighbors (include for each kingdom), up to one sentence, 10 words
-
-    """
+        s += f"""Kingdom {i + 1}: <kingdom name>\n"""
+        for fld, val in KINGDOM_DESC_STRUCT.items():
+            s += f"{fld}: {val}\n"
+        s += '\n'
 
     kingdoms_prompt = f"""Create a brief outline of {num_kingdoms} different kingdoms \
 for a fantasy world. This is the actual world:
@@ -126,7 +136,7 @@ It is very important that your output strictly follows this template:
 {s}"""
 
     return [
-        {"role": "system", "content": system_prompt_k},
+        {"role": "system", "content": LORE_GEN_SYS_PRT},
         {"role": "user", "content": kingdoms_prompt}]
 
 
@@ -134,28 +144,16 @@ def gen_towns_msgs(num_towns, world, kingdoms, kingdom_name):
     """
     Generates towns in a kingdom
     """
-    system_prompt_towns = f"""You are AI Game Master who plans and outlines RPG \
-game mechanics and game worlds. Your job is to help to create \
-interesting fantasy worlds that players would love to play in.
-
-Your answers shall be very short and outline only important \
-information. You follow following instructions:
-- Only generate in plain text without formatting.
-- Use simple clear language without being flowery.
-- You must provide short answers.
-- You strictly follow your instructions.
-- You never add anything from yourself.
-"""
-
     lst_kings = [x for x in kingdoms if x != kingdom_name]
+
     t_templ = ""
     for i in range(num_towns):
-        t_templ += f"""Town {i + 1}: <town name>
-history: brief history of the town, (1 sentence, max 10 words)
-location: up to 10 words
-important_places: up to 1 sentence, max 10 words, avoid these names: {', '.join(lst_kings)}
+        t_templ += f"""Town {i + 1}: <town name>\n"""
+        for fld, val in TOWNS_DESC_STRUCT.items():
+            t_templ += f"{fld}: {val}\n"
+        t_templ += f"avoid these names: {', '.join(lst_kings)}\n"
+        t_templ += '\n'
 
-"""
     town_prompt = f"""Use this information of about the world
 World Name: {world['name']}
 World Description: {world['description']}
@@ -165,6 +163,5 @@ and the kingdom:
 to create {num_towns} different towns for a fantasy kingdom and world using this template:
 {t_templ}"""
 
-    return [
-        {"role": "system", "content": system_prompt_towns},
-        {"role": "user", "content":  town_prompt}]
+    return [{"role": "system", "content": LORE_GEN_SYS_PRT},
+            {"role": "user", "content":  town_prompt}]
