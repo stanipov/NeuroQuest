@@ -26,14 +26,14 @@ class BaseClient(ABC):
         self.model_name = model_name
 
     @abstractmethod
-    def chat(self, messages: List[Dict[Any, Any]], *arg, **kwargs) -> Any:
+    def chat(self, messages: List[Dict[Any, Any]], *arg, **kwargs) -> Dict[str, Any]:
         """
         Sends messages to an LLM instance for processing.
 
         :param messages: A list of message dictionaries, each containing a 'content' key.
         :return: Dict[str, Any] ->
             response = {
-                "message": LLM reponse,
+                "message": LLM response,
                 "stats": {
                     'promt_tokens': count of prompt tokens
                     'promt_eval_duration': prompt evaluation duration in ms,
