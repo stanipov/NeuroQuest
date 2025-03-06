@@ -51,8 +51,8 @@ class GroqW(BaseClient):
         response = {
             'message': raw_response.choices[0].message.content,
             "stats": {
-                'promt_tokens': raw_response.usage.prompt_tokens,
-                'promt_eval_duration': raw_response.usage.prompt_time*1000,
+                'prompt_tokens': raw_response.usage.prompt_tokens,
+                'prompt_eval_duration': raw_response.usage.prompt_time*1000,
                 'eval_tokens': raw_response.usage.completion_tokens,
                 'eval_duration': raw_response.usage.completion_time*1000,
                 }
