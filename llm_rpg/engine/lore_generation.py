@@ -1,3 +1,4 @@
+from typing import List, Dict, Any
 import logging
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ class GenerateWorld:
         raw_world_response = self.client.chat(msg_world_gen, **client_kw)
         world_ai = parse_world_desc(raw_world_response['message'])
         logger.info(f"Created world: {world_ai['name']}")
-        logger.debug(f"Prompt tokens: {raw_world_response['stats']['promt_tokens']}")
+        logger.debug(f"Prompt tokens: {raw_world_response['stats']['prompt_tokens']}")
         logger.debug(f"Eval tokens: {raw_world_response['stats']['eval_tokens']}")
         self.game_lore['world'] = world_ai
         self.game_gen_params['model'] = self.client.model_name
@@ -56,7 +57,7 @@ class GenerateWorld:
         kingdoms_raw_response = self.client.chat(kingdoms_msg, **client_kw)
         kingdoms_ai = parse_kingdoms_response(kingdoms_raw_response['message'], self.expected_flds_kingdoms_def)
         logger.info(f"Created kingdoms: {list(kingdoms_ai.keys())}")
-        logger.debug(f"Prompt tokens: {kingdoms_raw_response['stats']['promt_tokens']}")
+        logger.debug(f"Prompt tokens: {kingdoms_raw_response['stats']['prompt_tokens']}")
         logger.debug(f"Eval tokens: {kingdoms_raw_response['stats']['eval_tokens']}")
         self.game_lore['kingdoms'] = kingdoms_ai
         self.game_gen_params['kingdoms'] = kingdoms_msg
@@ -81,12 +82,47 @@ class GenerateWorld:
             logger.info(f"Generating {num_towns} towns for {kingdom}")
             msg_towns_k = gen_towns_msgs(num_towns, self.game_lore['world'], self.game_lore['kingdoms'], kingdom)
             towns_raw_response = self.client.chat(msg_towns_k, **clinet_kw)
-            logger.debug(f"Prompt tokens: {towns_raw_response['stats']['promt_tokens']}")
+            logger.debug(f"Prompt tokens: {towns_raw_response['stats']['prompt_tokens']}")
             logger.debug(f"Eval tokens: {towns_raw_response['stats']['eval_tokens']}")
             towns = parse_towns(towns_raw_response['message'], self.expected_flds_towns_def)
             self.game_lore['towns'][kingdom] = towns
             self.game_gen_params['towns'][kingdom] = msg_towns_k
 
 
+class GenerateCharacter:
+    def __init__(self, client: BaseClient, **kwargs):
+        self.client = client
+        # stores all characters generated (human, antagonist, npcs, etc)
+        self.characters = {}
 
+    def gen_character(self, kind:str='human', **kwargs) -> Dict[str, Any]:
+        """
+        Creates a character
+
+        :param kind: human, antagonist, npc
+        :param kwargs:
+        :return:
+        """
+        raw_response = self.__gen_character_raw()
+        self.characters[kind] = self.__parse_char_response(raw_response, **kwargs)
+        return self.characters[kind]
+
+    def __gen_character_raw(self, kind:str='human', **kwargs) -> str:
+        """
+        Generates a string with character description. To be parsed
+        :param kind: human, antagonist, npc
+        :param kwargs:
+        :return:
+        """
+        return ""
+
+    def __parse_char_response(self, response:str, **kwargs) -> Dict[str, Any]:
+        """
+        Parses the raw response into a dictionary
+
+        :param response:
+        :param kwargs:
+        :return:
+        """
+        return {}
 

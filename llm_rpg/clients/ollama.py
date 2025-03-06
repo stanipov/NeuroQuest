@@ -50,8 +50,8 @@ class OllamaW(BaseClient):
         response = {
             'message': raw_response.message.content,
             'stats': {
-                'promt_tokens': raw_response.prompt_eval_count,
-                'promt_eval_duration': raw_response.prompt_eval_duration/10**6,
+                'prompt_tokens': raw_response.prompt_eval_count,
+                'prompt_eval_duration': raw_response.prompt_eval_duration/10**6,
                 'eval_tokens': raw_response.eval_count,
                 'eval_duration': raw_response.eval_duration/10**6
             }
