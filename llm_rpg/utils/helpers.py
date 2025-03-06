@@ -24,56 +24,52 @@ def parse_world_desc(world_output: str) -> Dict[str, str]:
     }
 
 
-def parse_kingdoms_response(kingdoms_output: str, expected_fields: Set[str]) -> Dict[str, str]:
-    kingdoms = {}
+def parse2structure(raw_response:str, expected_fields: Set[str]) ->Dict[str,str]:
+    """
+    A generic function to parse a string designed to be structured, eg:
+        name: entity name --> this is mandatory field! can be used as an ID or so
+        gender: character's gender, male\female\
+        occupation: pick one or two from warrior, researcher, magician, crook, theft, outcast
+        biography: a brief biography, 1-2 sentences
+        deeper_pains: describe deeper pains, 1 sentence up to 10 words
+        deeper_desires: describe deeper desires, 1 sentence up to 10 words
+    Note, the string expects to have a "name"
+    :param raw_response:
+    :param expected_fields:
+    :return:
+    """
+    struct_ans = {}
+    for kg in raw_response.split('\n\n'):
 
-    for kg in kingdoms_output.split('\n\n'):
         if len(kg) > 1:
             items = kg.split('\n')
             _name = items[0].split(':')[-1].strip()
 
             if _name != '':
-                kingdoms[_name] = {
-                    'name': _name,
-                }
+                struct_ans[_name] = {'name': _name}
 
                 for x in items[1:]:
                     try:
                         fld, s = x.split(':')
                         fld = fld.replace('\'', '')
                         if fld in expected_fields:
-                            kingdoms[_name][fld] = s.strip()
+                            struct_ans[_name][fld] = s.strip()
                     except Exception as e:
                         pass
 
-    return kingdoms
+    return struct_ans
+
+
+def parse_kingdoms_response(kingdoms_output: str, expected_fields: Set[str]) -> Dict[str, str]:
+    return parse2structure(kingdoms_output, expected_fields)
 
 
 def parse_towns(loc_response: str, expected_fields: Union[List[str], Set[str]]) -> Dict[str, Any]:
-    """
-    Parses the town locations for a kingdom
-    """
-    locations = {}
-    for item in loc_response.split('\n\n'):
-        if len(item) > 1:
-            loc_items = item.split('\n')
-            _name = loc_items[0].split(':')[-1].strip()
+    return parse2structure(loc_response, expected_fields)
 
-            if _name != '':
-                locations[_name] = {
-                    'name': _name
-                }
 
-                for x in loc_items[1:]:
-                    try:
-                        fld, s = x.split(':')
-                        fld = fld.replace('\'', '')
-                        if fld in expected_fields:
-                            locations[_name][fld] = s.strip()
-                    except Exception as e:
-                        pass
-
-    return locations
+def parse_character(loc_response: str, expected_fields: Union[List[str], Set[str]]) -> Dict[str, Any]:
+    return parse2structure(loc_response, expected_fields)
 
 
 def set_logger(level=logging.INFO,
@@ -100,3 +96,58 @@ def set_logger(level=logging.INFO,
     logger.addHandler(handler)
 
     return logger
+
+########################################################################################################################
+# On path to deprecation
+# The functions below will be eventually deprecated. They are kept here for
+# some time till I become confident the new replacement works as these
+
+def __old_parse_kingdoms_response(kingdoms_output: str, expected_fields: Set[str]) -> Dict[str, str]:
+    kingdoms = {}
+
+    for kg in kingdoms_output.split('\n\n'):
+        if len(kg) > 1:
+            items = kg.split('\n')
+            _name = items[0].split(':')[-1].strip()
+
+            if _name != '':
+                kingdoms[_name] = {
+                    'name': _name,
+                }
+
+                for x in items[1:]:
+                    try:
+                        fld, s = x.split(':')
+                        fld = fld.replace('\'', '')
+                        if fld in expected_fields:
+                            kingdoms[_name][fld] = s.strip()
+                    except Exception as e:
+                        pass
+
+    return kingdoms
+
+def __old_parse_towns(loc_response: str, expected_fields: Union[List[str], Set[str]]) -> Dict[str, Any]:
+    """
+    Parses the town locations for a kingdom
+    """
+    locations = {}
+    for item in loc_response.split('\n\n'):
+        if len(item) > 1:
+            loc_items = item.split('\n')
+            _name = loc_items[0].split(':')[-1].strip()
+
+            if _name != '':
+                locations[_name] = {
+                    'name': _name
+                }
+
+                for x in loc_items[1:]:
+                    try:
+                        fld, s = x.split(':')
+                        fld = fld.replace('\'', '')
+                        if fld in expected_fields:
+                            locations[_name][fld] = s.strip()
+                    except Exception as e:
+                        pass
+
+    return locations
