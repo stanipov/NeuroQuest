@@ -2,6 +2,8 @@
 Collection of prompts to generate the world and the lore
 """
 from ..utils.helpers import dict_2_str
+import logging
+logger = logging.getLogger(__name__)
 
 from typing import Dict, List, Set, Any, Optional
 
@@ -28,7 +30,7 @@ TOWNS_DESC_STRUCT = {
 
 # instructions to generate a character
 # do not add name, it's by default added!
-CHAR_DESC_SRTUCT = {
+CHAR_DESC_STRUCT = {
     "gender": "character's gender, pick from: male",
     "occupation": "pick one or two from warrior, researcher, magician, crook, theft, outcast",
     "biography": "a brief biography, 1-2 sentences",
@@ -137,6 +139,10 @@ def gen_kingdom_msgs(num_kingdoms:int,
     :return:
     """
 
+    if num_kingdoms < 1:
+        logger.warning(f"Expected \"num_kingdoms\">=1, got {num_kingdoms}. Set \"num_kingdoms\"=1!")
+        num_kingdoms = 1
+
     s = ""
     for i in range(num_kingdoms):
         s += f"""Kingdom {i + 1}: <kingdom name>\n"""
@@ -169,6 +175,10 @@ def gen_towns_msgs(num_towns, world, kingdoms, kingdom_name) -> List[Dict[str, A
     """
     lst_kings = [x for x in kingdoms if x != kingdom_name]
 
+    if num_towns < 1:
+        logger.warning(f"Expected \"num_towns\">=1, got {num_towns}. Set \"num_towns\"=1!")
+        num_towns = 1
+
     t_templ = ""
     for i in range(num_towns):
         t_templ += f"""Town {i + 1}: <town name>\n"""
@@ -190,19 +200,58 @@ to create {num_towns} different towns for a fantasy kingdom and world using this
             {"role": "user", "content":  town_prompt}]
 
 
-def gen_human_char_msgs(world:Dict[str, str],
-                        kingdom: Dict[str, str],
-                        town: str,
-                        gender:Optional[str]='') -> List[Dict[str, Any]]:
+def gen_human_char_msgs(game_lore: Dict[str, Any],
+                        kingdom_name: str,
+                        town_name: str,
+                        num_chars: int,
+                        char_description: Optional[Dict[str, str] | None] = None,
+                        avoid_names: List[str] = []) -> List[Dict[str, Any]]:
     """
     Generates messages to create player's character
-    :param world: world description and name
-    :param kingdom: dictionary with description of the kingdom
+    :param num_chars: number of characters to generate
+    :param avoid_names: list (if any) names banned from usage
+    :param kingdom_name: dictionary with description of the kingdom
                     where the human character is created
-    :param town: town
-    :param gender: optional , gender of the character. 
+    :param town_name: town
+    :param char_description: optional, a dictionary with character description.
     :return:
     """
 
+    if char_description is None:
+        char_description = CHAR_DESC_STRUCT
+    else:
+        if char_description == {}:
+            logger.error(f"char_description can't be empty dictionary!")
+            raise ValueError(f"char_description can't be empty dictionary!")
 
-    return []
+    if num_chars < 1:
+        logger.warning(f"Expected \"num_chars\">=1, got {num_chars}. Set \"num_chars\"=1!")
+        num_chars = 1
+
+    char_str = ""
+    for i in range(num_chars):
+        char_str += f"name{i + 1}: character's name\n"
+        for fld, val in char_description.items():
+            char_str += f"{fld}: {val}\n"
+        char_str += '\n'
+
+    char_instruct = f"""Create {num_chars} characters based on the world, kingdom \
+and town the character is in. Describe the character's appearance and \
+profession, as well as their deeper pains and desires.
+
+World Name: {game_lore['world']['name']}
+World Description: {game_lore['world']['description']}
+
+The kingdom: {dict_2_str(game_lore['kingdoms'][kingdom_name])}
+
+The town: {dict_2_str(game_lore['towns'][kingdom_name][town_name])}
+
+Your response must follow these instructions:
+{char_str}
+"""
+
+    if avoid_names and avoid_names != []:
+        char_instruct += f"You may not to use these names: {', '.join(avoid_names)}"
+
+    return [{'role': 'system', 'content': LORE_GEN_SYS_PRT},
+            {'role': 'user', 'content': char_instruct}]
