@@ -5,12 +5,15 @@ logger = logging.getLogger(__name__)
 from llm_rpg.prompts.lore_generation import (kingdoms_traits,
                                              KINGDOM_DESC_STRUCT,
                                              TOWNS_DESC_STRUCT,
+                                             CHAR_DESC_STRUCT,
                                              gen_world_msgs,
                                              gen_kingdom_msgs,
-                                             gen_towns_msgs)
+                                             gen_towns_msgs,
+                                             gen_human_char_msgs)
 from llm_rpg.utils.helpers import (parse_kingdoms_response,
                                    parse_towns,
-                                   parse_world_desc)
+                                   parse_world_desc,
+                                   parse_character)
 from llm_rpg.templates.base_client import BaseClient
 
 
@@ -63,7 +66,7 @@ class GenerateWorld:
         self.game_gen_params['kingdoms'] = kingdoms_msg
 
 
-    def gen_towns(self, num_towns, **clinet_kw):
+    def gen_towns(self, num_towns, **client_kw):
         """
         Generates towns for each kingdom. Provide number of towns.
         TBD: a single number for all kingdoms or introduce some variability. Issue with variability
@@ -81,7 +84,7 @@ class GenerateWorld:
         for kingdom in self.game_lore['kingdoms']:
             logger.info(f"Generating {num_towns} towns for {kingdom}")
             msg_towns_k = gen_towns_msgs(num_towns, self.game_lore['world'], self.game_lore['kingdoms'], kingdom)
-            towns_raw_response = self.client.chat(msg_towns_k, **clinet_kw)
+            towns_raw_response = self.client.chat(msg_towns_k, **client_kw)
             logger.debug(f"Prompt tokens: {towns_raw_response['stats']['prompt_tokens']}")
             logger.debug(f"Eval tokens: {towns_raw_response['stats']['eval_tokens']}")
             towns = parse_towns(towns_raw_response['message'], self.expected_flds_towns_def)
@@ -94,35 +97,74 @@ class GenerateCharacter:
         self.client = client
         # stores all characters generated (human, antagonist, npcs, etc)
         self.characters = {}
+        # defaults for expected fields for a human playable characters
+        self.DEF_H_CHAR_FLDS = set(CHAR_DESC_STRUCT.keys())
 
-    def gen_character(self, kind:str='human', **kwargs) -> Dict[str, Any]:
+    def gen_characters(self,
+                      game_lore:Dict[str, str],
+                      kind:str='human',**kwargs) -> Dict[str, Any]:
         """
         Creates a character
 
         :param kind: human, antagonist, npc
         :param kwargs:
+            char_desc_struct -- a dictionary with mandatory fields to generate
+            num_char -- number of characters to generate
         :return:
         """
-        raw_response = self.__gen_character_raw()
-        self.characters[kind] = self.__parse_char_response(raw_response, **kwargs)
-        return self.characters[kind]
 
-    def __gen_character_raw(self, kind:str='human', **kwargs) -> str:
+        characters = None
+
+        if kind == 'human':
+            characters = self.__gen_playable_char(game_lore, **kwargs)
+            logger.info(f'Generated {len(characters.keys())} characters')
+
+        if not characters and characters != {}:
+            logger.warning("Generation was not successful")
+        else:
+            self.characters.update(characters)
+
+        return characters
+
+    def __gen_playable_char(self, game_lore: Dict[str, str],**kwargs) -> Dict[str, str]:
         """
         Generates a string with character description. To be parsed
         :param kind: human, antagonist, npc
-        :param kwargs:
+        :param kwargs: These are expected
+            char_desc_struct -- a dictionary with mandatory fields to generate, if None, default is used
+            num_chars -- number of characters to generate, defaults to 1
+            kingdom_name -- kingdom name
+            town_name -- town name
         :return:
         """
-        return ""
 
-    def __parse_char_response(self, response:str, **kwargs) -> Dict[str, Any]:
-        """
-        Parses the raw response into a dictionary
+        char_description = kwargs.get('char_desc_struct', None)
+        num_chars = kwargs.get('num_chars', 1)
 
-        :param response:
-        :param kwargs:
-        :return:
-        """
-        return {}
+        var2verify = ['kingdom_name', 'town_name']
+        for varname in var2verify:
+            var = kwargs.get(varname, '')
+            if var and var == '':
+                logger.error(f"Expected \"{varname}\" to be a string type, got \"{var}\"")
+                raise ValueError(f"Expected \"{varname}\" to be a string type, got \"{var}\"")
 
+        kingdom_name = kwargs.get('kingdom_name', '')
+        town_name = kwargs.get('town_name', '')
+
+        names2avoid = list(self.characters.keys())
+        char_gen_msgs = gen_human_char_msgs(game_lore, kingdom_name, town_name,
+                                            num_chars, char_description, names2avoid)
+        raw_response = self.client.chat(char_gen_msgs)
+        if char_description is None:
+            expected_flds = self.DEF_H_CHAR_FLDS
+        else:
+            expected_flds = set(char_description.keys())
+
+        char_desc_str = raw_response['message']
+        characters = {}
+        try:
+            characters = parse_character(char_desc_str, expected_flds)
+        except Exception as e:
+            logger.warning(f"Error while parsing character generation response with error \"{e}\"")
+
+        return characters

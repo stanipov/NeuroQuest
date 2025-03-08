@@ -3,11 +3,13 @@ Collection of prompts to generate the world and the lore
 """
 from ..utils.helpers import dict_2_str
 
-from typing import Dict, List, Set, Any
+from typing import Dict, List, Set, Any, Optional
 
 
 ########################################################################################################################
 # default descriptions
+# instructions to generate a kingdom
+# these will be transferred to the LLMs
 KINGDOM_DESC_STRUCT= {
     "history": "brief history of the kingdom, (1 sentence, 10 words)",
     "type": "one of the kingdom generic descriptions, one word",
@@ -17,12 +19,33 @@ KINGDOM_DESC_STRUCT= {
     "international": "interaction with neighbors (include for each kingdom), up to one sentence, 10 words",
 }
 
+# instructions to generate a town in a kingdom
 TOWNS_DESC_STRUCT = {
     "history": "brief history of the town, (1 sentence, max 10 words)",
     "location": "geographical location of the town in the kingdom, up to 10 words",
     "important_places": "important places in the town, up to 1 sentence, max 10 words",
 }
 
+# instructions to generate a character
+# do not add name, it's by default added!
+CHAR_DESC_SRTUCT = {
+    "gender": "character's gender, pick from: male",
+    "occupation": "pick one or two from warrior, researcher, magician, crook, theft, outcast",
+    "biography": "a brief biography, 1-2 sentences",
+    "deeper_pains": "describe deeper pains, 1 sentence up to 10 words",
+    "deeper_desires": "describe deeper desires, 1 sentence up to 10 words",
+    "goal": "describe character's goal in the game, 1 sentence up to 10 words. Character's goal must be something epic and significant",
+    "strengths": "1 sentence up to 10 words",
+    "weaknesses": "1 sentence up to 10 words",
+    "inventory": """describe items the character has, up to 7 items, single string. Follow these rules for forming inventory:
+- Inventory must be in a reasonable agreement with character's goals, occupation, and biography. 
+- If the player is a warrior, it shall include armor (never leather!!!) and a weapon
+- If a player is a magician, the inventory must include relevant magical items
+- All inventory elements must fit the goal of the character"""
+}
+
+
+# Generic traits/descriptions of kingdoms. The LLM will pick randomly some of these
 kingdoms_traits = """The world has many kingdoms. They can be very different:
 1. magic, they rely on solving their problems on magic. Magicians are very respected
 2. militaristic, they have very strong armies, excell in warfare, tactics. They can be very aggressive towards \
@@ -140,7 +163,7 @@ It is very important that your output strictly follows this template:
         {"role": "user", "content": kingdoms_prompt}]
 
 
-def gen_towns_msgs(num_towns, world, kingdoms, kingdom_name):
+def gen_towns_msgs(num_towns, world, kingdoms, kingdom_name) -> List[Dict[str, Any]]:
     """
     Generates towns in a kingdom
     """
@@ -165,3 +188,21 @@ to create {num_towns} different towns for a fantasy kingdom and world using this
 
     return [{"role": "system", "content": LORE_GEN_SYS_PRT},
             {"role": "user", "content":  town_prompt}]
+
+
+def gen_human_char_msgs(world:Dict[str, str],
+                        kingdom: Dict[str, str],
+                        town: str,
+                        gender:Optional[str]='') -> List[Dict[str, Any]]:
+    """
+    Generates messages to create player's character
+    :param world: world description and name
+    :param kingdom: dictionary with description of the kingdom
+                    where the human character is created
+    :param town: town
+    :param gender: optional , gender of the character. 
+    :return:
+    """
+
+
+    return []
