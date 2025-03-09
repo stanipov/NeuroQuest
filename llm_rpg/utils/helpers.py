@@ -2,6 +2,16 @@ from typing import Dict, List, Set, Union, Any
 import logging
 from sys import stdout
 
+def input_not_ok(x, dtype, def_val) -> bool:
+    """
+    Checks if input is not OK
+    :param x: variable to check
+    :param dtype: type of the variable
+    :param def_val: default value (e.g. [], {})
+    :return: bool
+    """
+    return not x or (x != def_val and type(x) != dtype)
+
 def dict_2_str(d: Dict[str, str]) -> str:
     """
     Prints a simple dict to a string
@@ -51,7 +61,7 @@ def parse2structure(raw_response:str, expected_fields: Set[str]) ->Dict[str,str]
                 for x in items[1:]:
                     try:
                         fld, s = x.split(':')
-                        fld = fld.replace('\'', '')
+                        fld = fld.replace('\'', '').lower()
                         if fld in expected_fields:
                             struct_ans[_name][fld] = s.strip()
                     except Exception as e:
@@ -69,6 +79,9 @@ def parse_towns(loc_response: str, expected_fields: Union[List[str], Set[str]]) 
 
 
 def parse_character(loc_response: str, expected_fields: Union[List[str], Set[str]]) -> Dict[str, Any]:
+    return parse2structure(loc_response, expected_fields)
+
+def parse_antagonist(loc_response: str, expected_fields: Union[List[str], Set[str]]) -> Dict[str, Any]:
     return parse2structure(loc_response, expected_fields)
 
 

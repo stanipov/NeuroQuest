@@ -9,11 +9,15 @@ from llm_rpg.prompts.lore_generation import (kingdoms_traits,
                                              gen_world_msgs,
                                              gen_kingdom_msgs,
                                              gen_towns_msgs,
-                                             gen_human_char_msgs)
+                                             gen_human_char_msgs,
+                                             gen_antagonist_msgs,
+                                             ANTAGONIST_DESC)
 from llm_rpg.utils.helpers import (parse_kingdoms_response,
                                    parse_towns,
                                    parse_world_desc,
-                                   parse_character)
+                                   parse_character,
+                                   parse_antagonist,
+                                   input_not_ok)
 from llm_rpg.templates.base_client import BaseClient
 
 
@@ -94,11 +98,17 @@ class GenerateWorld:
 
 class GenerateCharacter:
     def __init__(self, client: BaseClient, **kwargs):
+        global CHAR_DESC_STRUCT, ANTAGONIST_DESC
         self.client = client
+
         # stores all characters generated (human, antagonist, npcs, etc)
         self.characters = {}
+
         # defaults for expected fields for a human playable characters
         self.DEF_H_CHAR_FLDS = set(CHAR_DESC_STRUCT.keys())
+        # defaults for the antagonist creation
+        self.DEF_A_CHAR_FLDS = set(ANTAGONIST_DESC.keys())
+
 
     def gen_characters(self,
                       game_lore:Dict[str, str],
@@ -118,6 +128,8 @@ class GenerateCharacter:
         if kind == 'human':
             characters = self.__gen_playable_char(game_lore, **kwargs)
             logger.info(f'Generated {len(characters.keys())} characters')
+        if kind == 'antagonist' or kind == 'enemy':
+            characters = self.__gen_antagonist(game_lore, **kwargs)
 
         if not characters and characters != {}:
             logger.warning("Generation was not successful")
@@ -154,7 +166,13 @@ class GenerateCharacter:
         names2avoid = list(self.characters.keys())
         char_gen_msgs = gen_human_char_msgs(game_lore, kingdom_name, town_name,
                                             num_chars, char_description, names2avoid)
-        raw_response = self.client.chat(char_gen_msgs)
+
+        try:
+            raw_response = self.client.chat(char_gen_msgs)
+        except Exception as e:
+            logger.error(f"Failed to receive LLM response\"{e}\"")
+            raise ValueError(f"Failed to receive LLM response\"{e}\"")
+
         if char_description is None:
             expected_flds = self.DEF_H_CHAR_FLDS
         else:
@@ -168,3 +186,39 @@ class GenerateCharacter:
             logger.warning(f"Error while parsing character generation response with error \"{e}\"")
 
         return characters
+
+    def __gen_antagonist(self,game_lore: Dict[str, str],**kwargs) -> Dict[str, str]:
+
+        human_desc = kwargs.get('player_desc', None)
+        k_name = kwargs.get("kingdom_name", None)
+        antag_desc = kwargs.get("antag_desc", None)
+
+        if input_not_ok(human_desc, dict, {}):
+            logger.error(f"Description of a human player can't be empty or None")
+            raise ValueError(f"Description of a human player can't be empty or None")
+
+        if input_not_ok(k_name, str, ''):
+            logger.error(f"Kingdom name can't be empty or None")
+            raise ValueError(f"Kingdom name can't be empty or None")
+
+        if input_not_ok(antag_desc, dict, {}):
+            logger.info(f"Using default for antagonist description")
+            antag_desc = ANTAGONIST_DESC
+            expected_flds = self.DEF_A_CHAR_FLDS
+        else:
+            expected_flds = set(antag_desc.keys)
+
+        msgs2gen = gen_antagonist_msgs(game_lore, human_desc, k_name, 1, antag_desc)
+        try:
+            raw_response = self.client.chat(msgs2gen)
+        except Exception as e:
+            logger.error(f"Failed to receive LLM response\"{e}\"")
+            raise ValueError(f"Failed to receive LLM response\"{e}\"")
+
+        ans = {}
+        try:
+            ans = parse_antagonist(raw_response['message'], expected_flds)
+        except Exception as e:
+            logger.warning(f"Could not part the LLm response with \"{e}\"")
+
+        return ans

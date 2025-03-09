@@ -28,8 +28,10 @@ TOWNS_DESC_STRUCT = {
     "important_places": "important places in the town, up to 1 sentence, max 10 words",
 }
 
-# instructions to generate a character
-# do not add name, it's by default added!
+# Instructions to generate a character
+# If you want to change it, follow these rules:
+# - never add "name" field, it will break internals
+# - "goal" field with the relevant description must be present, as its absence will break internals
 CHAR_DESC_STRUCT = {
     "gender": "character's gender, pick from: male",
     "occupation": "pick one or two from warrior, researcher, magician, crook, theft, outcast",
@@ -46,6 +48,18 @@ CHAR_DESC_STRUCT = {
 - All inventory elements must fit the goal of the character"""
 }
 
+# Instructions to generate human player's antagonist
+# If you want to change it, follow these rules:
+# - never add "name" field, it will break internals
+# - "goal" field with the relevant description must be present, as its absence will break internals
+ANTAGONIST_DESC = {
+    "occupation": "antagonist's position in the kingdom (ruler, magician, etc.)",
+    "biography": "a brief biography, 1-2 sentences",
+    "goal": "antagonist's goal in the game. It must be in a clear \
+    contradiction to goal of the human player, you must clearly write it.",
+    "strengths": "1 sentence up to 10 words",
+    "weaknesses": "1 sentence up to 10 words"
+}
 
 # Generic traits/descriptions of kingdoms. The LLM will pick randomly some of these
 kingdoms_traits = """The world has many kingdoms. They can be very different:
@@ -216,13 +230,14 @@ def gen_human_char_msgs(game_lore: Dict[str, Any],
     :param char_description: optional, a dictionary with character description.
     :return:
     """
-
-    if char_description is None:
+    global  LORE_GEN_SYS_PRT, CHAR_DESC_STRUCT
+    if not char_description or (char_description != {} and type(char_description) != dict):
         char_description = CHAR_DESC_STRUCT
-    else:
-        if char_description == {}:
-            logger.error(f"char_description can't be empty dictionary!")
-            raise ValueError(f"char_description can't be empty dictionary!")
+        logger.info(f"Using default description")
+
+    # a character must have own goal in the game
+    if 'goal' not in char_description:
+        char_description.update({'goal':CHAR_DESC_STRUCT['goal']})
 
     if num_chars < 1:
         logger.warning(f"Expected \"num_chars\">=1, got {num_chars}. Set \"num_chars\"=1!")
@@ -255,3 +270,44 @@ Your response must follow these instructions:
 
     return [{'role': 'system', 'content': LORE_GEN_SYS_PRT},
             {'role': 'user', 'content': char_instruct}]
+
+
+def gen_antagonist_msgs(game_lore: Dict[str, Any],
+                        player_desc: Dict[str, str],
+                        kingdom_name: str,
+                        num_chars: int = 1,
+                        antag_desc=None) -> List[Dict[str, Any]]:
+    global ANTAGONIST_DESC, LORE_GEN_SYS_PRT
+
+    if not antag_desc or (antag_desc != {} and type(antag_desc) != dict):
+        antag_desc = ANTAGONIST_DESC
+        logger.info(f"Using default description")
+
+    char_str = ""
+    for i in range(max(num_chars, 1)):
+        char_str += f"name{i + 1}: character's name\n"
+        for fld, val in antag_desc.items():
+            if fld == 'goal' and 'goal' in player_desc:
+                char_str += f"{fld}: {val}. The player's goal: {player_desc['goal']}\n"
+            else:
+                char_str += f"{fld}: {val}\n"
+        char_str += '\n'
+
+    antag_char_prompt = f"""Create an antagonist to a human character based on the world description:
+World Name: {game_lore['world']['name']}
+World Description: {game_lore['world']['description']}
+
+The human player: 
+{dict_2_str(player_desc)}
+
+The antagonist is a ruler or a significant person of {kingdom_name}. This is description of the kingdom:
+{dict_2_str(game_lore["kingdoms"][kingdom_name])}
+
+Create your response based on these guidelines:
+{char_str}
+"""
+
+    return [
+        {'role': 'system', 'content': LORE_GEN_SYS_PRT},
+        {'role': 'user', 'content': antag_char_prompt}
+    ]
