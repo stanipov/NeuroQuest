@@ -311,3 +311,48 @@ Create your response based on these guidelines:
         {'role': 'system', 'content': LORE_GEN_SYS_PRT},
         {'role': 'user', 'content': antag_char_prompt}
     ]
+
+
+def gen_condition_end_game(game_lore: Dict[str, Any],
+                           player_desc: Dict[str, str],
+                           antagonist_desc: Dict[str, str],
+                           human_loc: str,
+                           antag_loc: str,
+                           num_conditions: int,
+                           condition: str) -> List[Dict[str, str]]:
+    """
+    Generates messages to create conditions to win or loose the game
+
+    :param game_lore: condensed game lore, not what is shown to the player
+    :param player_desc: a dictionary with description of the human player
+    :param antagonist_desc: a dictionary with description of the antagonist/enemy
+    :param human_loc: starting kingdom of the human player
+    :param antag_loc: (starting?) location of the antagonist
+    :param num_conditions: number of condition to win/loose
+    :param condition: win or loose.
+    :return: messages (aka list of dictionaries)
+    """
+    global LORE_GEN_SYS_PRT
+
+    win_conditions_prt = f"""
+Generate conditions to {condition} for a human player
+{player_desc}
+
+This player is against this antagonist:
+{antagonist_desc}
+
+These characters act in this world:
+World Name: {game_lore['world']['name']}
+World Description: {game_lore['world']['description']}
+
+Players kingdom:
+{game_lore['kingdoms'][human_loc]}
+
+Antagonist's kingdom:
+{game_lore['kingdoms'][antag_loc]}
+
+You response must be a numbered list of {num_conditions} conditions to {condition}. 
+Provide only a numbered list without any additional words"""
+
+    return [{'role': 'system', 'content': LORE_GEN_SYS_PRT},
+            {'role': 'user', 'content': win_conditions_prt}]
