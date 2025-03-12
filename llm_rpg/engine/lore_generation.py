@@ -1,5 +1,8 @@
 from typing import List, Dict, Any
 import logging
+
+from cytoolz import random_sample
+
 logger = logging.getLogger(__name__)
 
 from llm_rpg.prompts.lore_generation import (kingdoms_traits,
@@ -11,7 +14,8 @@ from llm_rpg.prompts.lore_generation import (kingdoms_traits,
                                              gen_towns_msgs,
                                              gen_human_char_msgs,
                                              gen_antagonist_msgs,
-                                             ANTAGONIST_DESC)
+                                             ANTAGONIST_DESC,
+                                             gen_condition_end_game)
 from llm_rpg.utils.helpers import (parse_kingdoms_response,
                                    parse_towns,
                                    parse_world_desc,
@@ -95,6 +99,37 @@ class GenerateWorld:
             self.game_lore['towns'][kingdom] = towns
             self.game_gen_params['towns'][kingdom] = msg_towns_k
 
+    def gen_end_game_conditions(self,
+                                player_desc:Dict[str, str],
+                                player_loc:str,
+                                antag_desc:Dict[str, str],
+                                antag_loc:str,
+                                num_conditions:int) -> None:
+        """
+        Generates conditions to win and loose the game given the description of the human player and its antagonist
+        :param antag_loc: location (starting) of the antagonist/enemy
+        :param player_loc: starting location of the human player
+        :param player_desc: description of the human player
+        :param antag_desc: description of the antagonist/enemy
+        :param num_conditions: number of conditions
+        :return:
+        """
+
+        kinds = ["win", "loose"]
+
+        self.game_lore["end_game"] = {}
+        for kind in kinds:
+            logger.info(f"Generating {num_conditions} conditions to {kind}")
+            try:
+                cond_gen_msgs = gen_condition_end_game(self.game_lore, player_desc, antag_desc, player_loc, antag_loc,
+                                                   num_conditions, kind)
+                raw_response = self.client.chat(cond_gen_msgs)
+                self.game_lore["end_game"][kind] = raw_response["message"]
+            except Exception as e:
+                logger.error(f"Could not generate conditions to \"{kind}\" with \"{e}\" error")
+                raise ValueError(f"Could not generate conditions to \"{kind}\" with \"{e}\" error")
+        logger.info("Done")
+
 
 class GenerateCharacter:
     def __init__(self, client: BaseClient, **kwargs):
@@ -103,6 +138,8 @@ class GenerateCharacter:
 
         # stores all characters generated (human, antagonist, npcs, etc)
         self.characters = {}
+        # a mapping between names and kinds (human, npc, etc.)
+        self.characters_kinds = {}
 
         # defaults for expected fields for a human playable characters
         self.DEF_H_CHAR_FLDS = set(CHAR_DESC_STRUCT.keys())
@@ -135,13 +172,15 @@ class GenerateCharacter:
             logger.warning("Generation was not successful")
         else:
             self.characters.update(characters)
+            # update the mapping
+            for key in characters:
+                self.characters_kinds[key] = kind
 
         return characters
 
     def __gen_playable_char(self, game_lore: Dict[str, str],**kwargs) -> Dict[str, str]:
         """
         Generates a string with character description. To be parsed
-        :param kind: human, antagonist, npc
         :param kwargs: These are expected
             char_desc_struct -- a dictionary with mandatory fields to generate, if None, default is used
             num_chars -- number of characters to generate, defaults to 1
@@ -187,8 +226,17 @@ class GenerateCharacter:
 
         return characters
 
-    def __gen_antagonist(self,game_lore: Dict[str, str],**kwargs) -> Dict[str, str]:
+    def __gen_antagonist(self, game_lore: Dict[str, str],**kwargs) -> Dict[str, str]:
+        """
 
+        :param game_lore: Dict with all generated game lore
+        :param kwargs:
+            player_desc: a dictionary with description of the human player
+            kingdom_name: kingdom where the antagonist acts/starts/etc
+            antag_desc: a dictionary with instructions, if not provided, default will be used
+         :return: messages (aka list of dictionaries)
+
+        """
         human_desc = kwargs.get('player_desc', None)
         k_name = kwargs.get("kingdom_name", None)
         antag_desc = kwargs.get("antag_desc", None)
@@ -208,7 +256,7 @@ class GenerateCharacter:
         else:
             expected_flds = set(antag_desc.keys)
 
-        msgs2gen = gen_antagonist_msgs(game_lore, human_desc, k_name, 1, antag_desc)
+        msgs2gen = gen_antagonist_msgs(game_lore, human_desc, k_name,1, antag_desc)
         try:
             raw_response = self.client.chat(msgs2gen)
         except Exception as e:
