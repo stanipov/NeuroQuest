@@ -9,9 +9,9 @@ Lore generation progress:
 - locations (kingdoms and towns)
 - playable character
 - antagonist generation
+- conditions to win and lose (added to game lore generation class)
 
 To-do:
-- conditions to win and lose (add the char generation class --> does not seem to belong strictly to any of the classes)
 - world rules/functioning principles
 - storyteller: convert bullet-point-like descriptions into a concise, short, and appealing text like in real RPGs
 
