@@ -44,6 +44,10 @@ class OllamaW(BaseClient):
             opts = self.model_options
         else:
             opts = options
+
+        if "temperature" in kwargs:
+            opts.update({"temperature": kwargs['temperature']})
+
         raw_response =  self.client.chat(model=self.model_name,
                            options=opts,
                            messages=messages)

@@ -35,6 +35,7 @@ TOWNS_DESC_STRUCT = {
 CHAR_DESC_STRUCT = {
     "gender": "character's gender, pick from: male",
     "occupation": "pick one or two from warrior, researcher, magician, crook, theft, outcast",
+    "age": "pick between 20 to 35",
     "biography": "a brief biography, 1-2 sentences",
     "deeper_pains": "describe deeper pains, 1 sentence up to 10 words",
     "deeper_desires": "describe deeper desires, 1 sentence up to 10 words",
@@ -99,7 +100,7 @@ world_desc_grim = """- This is fantasy world where magic is strong.
 - Climate is good in the South, but more northern regions are harsher.
 - The world has long winters and summers, which change relatively fast.
 - Many creatures are indifferent to humans, but some are very unfriendly.
-- The world is populated with humans, elves, trolls,  goblins, dragons.
+- The world is populated with humans, elves, trolls, goblins, dragons.
 - Gods are present, but they are lazy, self-centered, arrogant, and cruel. The gods are not very powerful.
 - There several large continents, but people have very vague knowledge of other continents."""
 ########################################################################################################################
@@ -116,7 +117,7 @@ information. You follow following instructions:
 - Use simple clear language without being flowery.
 - You strictly follow your instructions.
 - You never add anything from yourself.
-- You must stay below 3-5 sentences for each description."""
+- You must stay below 5 sentences for each description."""
 
 ########################################################################################################################
 def gen_world_msgs(world_desc:str) -> List[Dict[str, str]]:

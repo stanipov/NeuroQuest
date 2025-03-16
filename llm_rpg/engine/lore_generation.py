@@ -1,28 +1,143 @@
-from typing import List, Dict, Any
 import logging
-
-from cytoolz import random_sample
+from keyword import kwlist
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
-from llm_rpg.prompts.lore_generation import (kingdoms_traits,
+from llm_rpg.prompts.lore_generation import (world_desc_grim,
+                                             kingdoms_traits,
                                              KINGDOM_DESC_STRUCT,
                                              TOWNS_DESC_STRUCT,
                                              CHAR_DESC_STRUCT,
+                                             ANTAGONIST_DESC,
                                              gen_world_msgs,
                                              gen_kingdom_msgs,
                                              gen_towns_msgs,
                                              gen_human_char_msgs,
                                              gen_antagonist_msgs,
-                                             ANTAGONIST_DESC,
                                              gen_condition_end_game)
+
 from llm_rpg.utils.helpers import (parse_kingdoms_response,
                                    parse_towns,
                                    parse_world_desc,
                                    parse_character,
                                    parse_antagonist,
                                    input_not_ok)
+
 from llm_rpg.templates.base_client import BaseClient
+
+import random
+
+
+class LoreGeneratorGvt:
+    def __init__(self, client: BaseClient, **kwargs):
+        """
+        Governor that generates game lore. The game lore is generated as a plan/brief outline
+        as it is intended for feeding into an LLM. A separate component will generate a human-readable
+        text.
+
+        :param client: the LLM client
+        :param kwargs: any arguments needed in the future
+        """
+        global world_desc_grim
+        self.client = client
+        self.lore = {}
+        self.game_gen_params = {}
+
+        self.world_generator = GenerateWorld(self.client)
+        self.char_gen = GenerateCharacter(self.client)
+
+        # defaults
+        self.WORLD_DESC = world_desc_grim
+
+
+    def generate_world(self, world_desc: str='',
+                       **client_kwargs):
+        if input_not_ok(world_desc, str, ''):
+            world_desc = self.WORLD_DESC
+        self.world_generator.gen_world(world_desc, **client_kwargs)
+        self.lore.update(self.world_generator.game_lore)
+        self.game_gen_params.update(self.world_generator.game_gen_params)
+
+
+    def generate_kingdoms(self, num_kingdoms:int,
+                          kingdom_types:str|None=None,
+                          **client_kw):
+        self.world_generator.gen_kingdoms(num_kingdoms, kingdom_types, **client_kw)
+        self.lore.update(self.world_generator.game_lore)
+        self.game_gen_params.update(self.world_generator.game_gen_params)
+
+
+    def generate_towns(self, num_towns,
+                       **client_kw):
+        self.world_generator.gen_towns(num_towns, **client_kw)
+        self.lore.update(self.world_generator.game_lore)
+        self.game_gen_params.update(self.world_generator.game_gen_params)
+
+
+    def generate_human_player(self, **client_kw):
+        # random choice of starting location
+        kingdom_name = random.choice(list(self.lore['kingdoms'].keys()))
+        town_name = random.choice(list(self.lore['towns'][kingdom_name].keys()))
+        #print(f"Kingdom: {kingdom_name}")
+        #print(f"Town:    {town_name}")
+
+        ans = self.char_gen.gen_characters(self.lore, "human",
+                                           num_chars=1,
+                                           kingdom_name=kingdom_name,
+                                           town_name=town_name,
+                                           **client_kw)
+        _key = list(ans.keys())[0]
+        self.lore['human_player'] = ans[_key]
+
+        if 'start_location' not in self.lore:
+            self.lore['start_location'] = {}
+
+        self.lore['start_location'] = {
+            'human': {
+                'kingdom': kingdom_name,
+                'town': town_name
+            }
+        }
+        self.game_gen_params.update(self.char_gen.char_gen_params)
+
+
+    def generate_antagonist(self, same_location:bool=True):
+        if same_location:
+            kingdom_name = self.lore['start_location']['human']['kingdom']
+        else:
+            max_iter = 10
+            cnt = 0
+            kingdom_name = random.choice(list(self.lore['kingdoms'].keys()))
+            while kingdom_name == self.lore['start_location']['human']['kingdom'] and cnt < max_iter:
+                kingdom_name = random.choice(list(self.lore['kingdoms'].keys()))
+                cnt += 1
+
+        ans = self.char_gen.gen_characters(self.lore, 'enemy',
+                                           player_desc=self.lore['human_player'],
+                                           kingdom_name=kingdom_name)
+        _key = list(ans.keys())[0]
+        self.lore['antagonist'] = ans[_key]
+
+        if 'start_location' not in self.lore:
+            self.lore['start_location'] = {}
+
+        self.lore['start_location'] = {
+            'antagonist': {
+                'kingdom': kingdom_name,
+                'town': ""
+            }
+        }
+        self.game_gen_params.update(self.char_gen.char_gen_params)
+
+    def generate_end_game_conditions(self, num_conditions:int=3):
+        self.world_generator.gen_end_game_conditions(player_desc=self.lore['human_player'],
+                                                     player_loc=self.lore['start_location']['human']['kingdom'],
+                                                     antag_desc=self.lore['antagonist'],
+                                                     antag_loc=self.lore['start_location']['antagonist']['kingdom'],
+                                                     num_conditions=num_conditions)
+        self.lore.update(self.world_generator.game_lore)
+        self.game_gen_params.update(self.world_generator.game_gen_params)
 
 
 class GenerateWorld:
@@ -40,6 +155,7 @@ class GenerateWorld:
         """
         Generates the world description. Provide world description
 
+        :param world_desc:
         :param client_kw:
         :return:
         """
@@ -59,6 +175,7 @@ class GenerateWorld:
         Generates kingdoms in the world. Provide number of kingdoms, their types
         """
 
+        global kingdoms_traits
         if kingdom_types is None:
             kingdom_types = kingdoms_traits
         if kingdom_types is not None and kingdom_types == "":
@@ -74,15 +191,15 @@ class GenerateWorld:
         self.game_gen_params['kingdoms'] = kingdoms_msg
 
 
-    def gen_towns(self, num_towns, **client_kw):
+    def gen_towns(self,
+                  num_towns,
+                  **client_kw):
         """
         Generates towns for each kingdom. Provide number of towns.
         TBD: a single number for all kingdoms or introduce some variability. Issue with variability
         is that for small numbers random choices do not look that random
 
         :param num_towns:
-        :param world:
-        :param kingdoms:
         :return:
         """
 
@@ -132,12 +249,15 @@ class GenerateWorld:
 
 
 class GenerateCharacter:
+    global CHAR_DESC_STRUCT, ANTAGONIST_DESC
     def __init__(self, client: BaseClient, **kwargs):
         global CHAR_DESC_STRUCT, ANTAGONIST_DESC
         self.client = client
 
         # stores all characters generated (human, antagonist, npcs, etc)
         self.characters = {}
+        # store this data for possible debugging and logging
+        self.char_gen_params = {}
         # a mapping between names and kinds (human, npc, etc.)
         self.characters_kinds = {}
 
@@ -149,7 +269,8 @@ class GenerateCharacter:
 
     def gen_characters(self,
                       game_lore:Dict[str, str],
-                      kind:str='human',**kwargs) -> Dict[str, Any]:
+                      kind:str='human',
+                      **kwargs) -> Dict[str, Any]:
         """
         Creates a character
 
@@ -205,9 +326,17 @@ class GenerateCharacter:
         names2avoid = list(self.characters.keys())
         char_gen_msgs = gen_human_char_msgs(game_lore, kingdom_name, town_name,
                                             num_chars, char_description, names2avoid)
+        self.char_gen_params['characters'] = char_gen_msgs
+
+        # pop the non-llm-client related kwargs:
+        for _item in ['char_desc_struct', 'num_chars', 'kingdom_name', 'town_name']:
+            try:
+                _ = kwargs.pop(_item)
+            except Exception as E:
+                pass
 
         try:
-            raw_response = self.client.chat(char_gen_msgs)
+            raw_response = self.client.chat(char_gen_msgs, **kwargs)
         except Exception as e:
             logger.error(f"Failed to receive LLM response\"{e}\"")
             raise ValueError(f"Failed to receive LLM response\"{e}\"")
@@ -225,6 +354,7 @@ class GenerateCharacter:
             logger.warning(f"Error while parsing character generation response with error \"{e}\"")
 
         return characters
+
 
     def __gen_antagonist(self, game_lore: Dict[str, str],**kwargs) -> Dict[str, str]:
         """
@@ -257,8 +387,17 @@ class GenerateCharacter:
             expected_flds = set(antag_desc.keys)
 
         msgs2gen = gen_antagonist_msgs(game_lore, human_desc, k_name,1, antag_desc)
+        self.char_gen_params['antagonists'] = msgs2gen
+
+        # pop the non-llm-client related kwargs:
+        for _item in ['player_desc', 'kingdom_name', 'antag_desc']:
+            try:
+                _ = kwargs.pop(_item)
+            except Exception as E:
+                pass
+
         try:
-            raw_response = self.client.chat(msgs2gen)
+            raw_response = self.client.chat(msgs2gen, **kwargs)
         except Exception as e:
             logger.error(f"Failed to receive LLM response\"{e}\"")
             raise ValueError(f"Failed to receive LLM response\"{e}\"")
