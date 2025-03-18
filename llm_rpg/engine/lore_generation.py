@@ -1,5 +1,16 @@
+"""
+Collection of tools to generate a game lore using some basic inputs
+
+There are currently 2 major classes:
+1. GenerateWorld -- generates world and conditions to lose/win
+2. GenerateCharacter -- generates characters (player/npc and player's opponent)
+
+These classes provide tools to generate the respective lore part. They are governed
+ by LoreGeneratorGvt which instantiates both of these and calls with proper arguments.
+"""
+
+
 import logging
-from keyword import kwlist
 from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -93,11 +104,9 @@ class LoreGeneratorGvt:
         if 'start_location' not in self.lore:
             self.lore['start_location'] = {}
 
-        self.lore['start_location'] = {
-            'human': {
-                'kingdom': kingdom_name,
-                'town': town_name
-            }
+        self.lore['start_location']['human'] = {
+            'kingdom': kingdom_name,
+            'town': town_name
         }
         self.game_gen_params.update(self.char_gen.char_gen_params)
 
@@ -122,12 +131,9 @@ class LoreGeneratorGvt:
         if 'start_location' not in self.lore:
             self.lore['start_location'] = {}
 
-        self.lore['start_location'] = {
-            'antagonist': {
-                'kingdom': kingdom_name,
-                'town': ""
-            }
-        }
+        self.lore['start_location']['antagonist'] = {
+            'kingdom': kingdom_name,
+            'town': ""}
         self.game_gen_params.update(self.char_gen.char_gen_params)
 
     def generate_end_game_conditions(self, num_conditions:int=3):
@@ -215,6 +221,7 @@ class GenerateWorld:
             towns = parse_towns(towns_raw_response['message'], self.expected_flds_towns_def)
             self.game_lore['towns'][kingdom] = towns
             self.game_gen_params['towns'][kingdom] = msg_towns_k
+
 
     def gen_end_game_conditions(self,
                                 player_desc:Dict[str, str],

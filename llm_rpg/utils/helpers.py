@@ -94,7 +94,8 @@ def set_logger(level=logging.INFO,
         raise ValueError("Invalid output parameter. Must be 'stdout', 'stderr', or a valid file path.")
 
     logFormatter = logging.Formatter(
-        fmt=fmt
+        fmt=fmt,
+        datefmt='%Y-%m-%d %H:%M:%S'
     )
 
     logger = logging.getLogger()

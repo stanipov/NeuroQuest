@@ -119,6 +119,10 @@ information. You follow following instructions:
 - You never add anything from yourself.
 - You must stay below 5 sentences for each description."""
 
+# A system prompt to generate a literary text based on an outline
+STORY_TELLER_SYS_PRT = """You are an author narrating events based on the provided prompt below. \
+Each section of events should be narrated in the third person limited perspective. \
+The language should be straightforward and to the point."""
 ########################################################################################################################
 def gen_world_msgs(world_desc:str) -> List[Dict[str, str]]:
     """
@@ -128,6 +132,7 @@ def gen_world_msgs(world_desc:str) -> List[Dict[str, str]]:
     :return:
     """
 
+    global LORE_GEN_SYS_PRT
     world_prompt = f"""Generate a creative description of a unique fantasy world. Be poetic. \
 These are world properties:
 {world_desc}
@@ -153,6 +158,7 @@ def gen_kingdom_msgs(num_kingdoms:int,
     :param world: world description
     :return:
     """
+    global LORE_GEN_SYS_PRT
 
     if num_kingdoms < 1:
         logger.warning(f"Expected \"num_kingdoms\">=1, got {num_kingdoms}. Set \"num_kingdoms\"=1!")
@@ -188,6 +194,9 @@ def gen_towns_msgs(num_towns, world, kingdoms, kingdom_name) -> List[Dict[str, A
     """
     Generates towns in a kingdom
     """
+
+    global LORE_GEN_SYS_PRT
+
     lst_kings = [x for x in kingdoms if x != kingdom_name]
 
     if num_towns < 1:
@@ -356,3 +365,20 @@ Provide only a numbered list without any additional words"""
 
     return [{'role': 'system', 'content': LORE_GEN_SYS_PRT},
             {'role': 'user', 'content': conditions_prt}]
+
+def gen_story_telling_msg(txt: Dict[str, Any]|str) -> List[Dict[str, str]]:
+    """
+    Generates messages to rewrite an outline to an appealing text to show to the human player
+    :param txt: dictionary or a text to rewrite
+    :return: List[Dict[str, Str]]
+    """
+    global STORY_TELLER_SYS_PRT
+
+    task = f"""Rewrite the following outline into a concise, coherent, and engaging literary text:
+{txt}"""
+    if hasattr(txt, 'keys'):
+        task += f"\nYou must include information from these fields in your response: {txt.keys()}."
+    task += "\nWrite 5 sentences maximum."
+
+    return [{'role': 'system', 'content': STORY_TELLER_SYS_PRT},
+            {'role': 'user', 'content': task}]
