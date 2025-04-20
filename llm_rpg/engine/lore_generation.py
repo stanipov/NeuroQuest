@@ -27,6 +27,7 @@ from llm_rpg.prompts.lore_generation import (world_desc_grim,
                                              gen_human_char_msgs,
                                              gen_antagonist_msgs,
                                              gen_condition_end_game)
+from llm_rpg.engine.tools import ObjectDescriptor
 
 from llm_rpg.utils.helpers import (parse_kingdoms_response,
                                    parse_towns,
@@ -38,6 +39,7 @@ from llm_rpg.utils.helpers import (parse_kingdoms_response,
 from llm_rpg.templates.base_client import BaseClient
 
 import random
+from time import sleep
 
 
 class LoreGeneratorGvt:
@@ -54,9 +56,19 @@ class LoreGeneratorGvt:
         self.client = client
         self.lore = {}
         self.game_gen_params = {}
+        # LUT for inventory items
+        self.lore['inventory_lut'] = {}
+
+        # API calls delay in seconds
+        # needed for rate limitations
+        if "api_delay" in kwargs:
+            self.api_delay = kwargs.pop('api_delay')
+        else:
+            self.api_delay = 0
 
         self.world_generator = GenerateWorld(self.client)
         self.char_gen = GenerateCharacter(self.client)
+        self.ObjDesc = ObjectDescriptor(client)
 
         # defaults
         self.WORLD_DESC = world_desc_grim
@@ -136,6 +148,7 @@ class LoreGeneratorGvt:
             'town': ""}
         self.game_gen_params.update(self.char_gen.char_gen_params)
 
+
     def generate_end_game_conditions(self, num_conditions:int=3):
         self.world_generator.gen_end_game_conditions(player_desc=self.lore['human_player'],
                                                      player_loc=self.lore['start_location']['human']['kingdom'],
@@ -144,6 +157,49 @@ class LoreGeneratorGvt:
                                                      num_conditions=num_conditions)
         self.lore.update(self.world_generator.game_lore)
         self.game_gen_params.update(self.world_generator.game_gen_params)
+
+
+    def describe_inventories(self, temperature=0.25):
+        """
+        TODO: this is a wrapper method which will call a method that describes items (?)
+        Describes inventory elements of each item in inventories (human, NPCs, antagonist, etc.)
+        :param temperature:
+        :return:
+        """
+        if 'human_player' in self.lore:
+            logger.info(f"Describing inventory items for the human player")
+            inv_items = [x.strip() for x in self.lore['human_player']['inventory'].split(', ')]
+            ans = self.__describe_items(inv_items, temperature)
+            self.lore['inventory_lut'].update(ans)
+            self.lore['human_player']['inventory'] = list(ans.keys())
+
+        if "npc" in self.lore:
+            logger.info(f"Describing inventory items fot NPCs")
+            for npc in self.lore['npc']:
+                logger.info(f"NPC: {npc}")
+                inv_items = [x.strip() for x in self.lore['npc'][npc]['inventory'].split(', ')]
+                ans = self.__describe_items(inv_items, temperature)
+                self.lore['inventory_lut'].update(ans)
+                self.lore['npc'][npc]['inventory'] = list(ans.keys())
+
+        if "antagonist" in self.lore:
+            if 'inventory' in self.lore["antagonist"]:
+                logger.info(f"Describing inventory items for the antagonist")
+                inv_items = [x.strip() for x in self.lore['antagonist']['inventory'].split(', ')]
+                ans = self.__describe_items(inv_items, temperature)
+                self.lore['inventory_lut'].update(ans)
+                self.lore['antagonist']['inventory'] = list(ans.keys())
+
+        logger.info(f"Done")
+
+
+    def __describe_items(self, items, temperature=0.25):
+        ans = {}
+        for item in items:
+            _t = self.ObjDesc.describe(item, temperature=temperature)
+            ans[_t['name']] = _t
+            sleep(self.api_delay)
+        return ans
 
 
 class GenerateWorld:

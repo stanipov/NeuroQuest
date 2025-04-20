@@ -49,9 +49,10 @@ CHAR_DESC_STRUCT = {
     "weaknesses": "1 sentence up to 10 words",
     "inventory": """describe items the character has, up to 7 items, single string. Follow these rules for forming inventory:
 - Inventory must be in a reasonable agreement with character's goals, occupation, and biography. 
-- If the player is a warrior, it shall include armor (never leather!!!) and a weapon
+- If the player is a warrior, it shall include armor (never leather!!!) and a weapon (always made of a metal or alloy, never bone, wood)
 - If a player is a magician, the inventory must include relevant magical items
-- All inventory elements must fit the goal of the character"""
+- All inventory elements must fit the goal of the character
+- list all items comma separated; never use 'and'"""
 }
 
 
@@ -154,7 +155,7 @@ Your job is to provide description, type of a game object. \
 You will also provide a brief explanation on how it acts/works
 and estimate its strength if applicable.
 
-Some of the requested paramteres could be irrelevant for a given object. \
+Some of the requested parameters could be irrelevant for a given object. \
 You must identify if certain instructions are applicable, if not, \
 your response to these instructions will be empty strings.
 
@@ -421,7 +422,7 @@ def gen_obj_est_msgs(obj: str) -> List[Dict[str, str]]:
     task += f"name: provide name of the object {obj}. If \"{obj}\" starts with article, remove it. \
     Remove also all non-relevant parts. \
     Examples: 1) a huge wooden spear with beautiful and intricate carving --> name: large wooden spear; \
-    2) a battle axe --> name: battle axe \n"
+    2) a battle axe --> name: battle axe 3) silver-plated plate armor --> name: plate armor\n"
 
     for key, inst in OBJECT_DESC.items():
         task += f"{key}: {inst}\n"

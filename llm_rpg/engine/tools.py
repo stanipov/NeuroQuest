@@ -4,9 +4,7 @@ Collection of helper tools needed for the game.
 TODO: InventoryChange --> detects changes into inventory
 
 # - ObjectDetector --> detects all objects/tools used by the human and the AI player
-
 """
-
 
 import logging
 logger = logging.getLogger(__name__)
@@ -35,6 +33,7 @@ class ObjectDescriptor:
             rollback[fld] = ''
         return rollback
 
+
     def describe(self, obj: str, **kwargs) -> Dict[str, str]:
         msgs = gen_obj_est_msgs(obj)
         response = self.client.chat(msgs, **kwargs)
@@ -43,7 +42,8 @@ class ObjectDescriptor:
         # parse the response
         response_dict = {}
         try:
-            response_dict = parse2structure(response['message'], self.obj_expected_flds)
+            ans = parse2structure(response['message'], self.obj_expected_flds)
+            response_dict = ans[list(ans.keys())[0]]
         except Exception as e:
             logger.warning(f"Could not parse response for \"{obj}\" with \"{e}\" error! Using the rollback!")
             response_dict = self.__gen_rollback(obj)
