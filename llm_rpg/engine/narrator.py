@@ -5,16 +5,14 @@ into an appealing text to be shown to the human player
 
 
 import logging
-from http.client import responses
-
 logger = logging.getLogger(__name__)
 
 from typing import Dict, Any
 import json
 
 from llm_rpg.templates.base_client import BaseClient
-from llm_rpg.prompts.lore_generation import (STORY_TELLER_SYS_PRT,
-                                             gen_story_telling_msg)
+from llm_rpg.prompts.gameplay import (STORY_TELLER_SYS_PRT,
+                                      gen_story_telling_msg)
 
 
 class Narrator:
