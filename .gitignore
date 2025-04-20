@@ -5,6 +5,9 @@ data_ignore/
 lore/
 .tmp/
 usefull_links
+tests/
+test_folder/
+test_*/
 
 
 # Byte-compiled / optimized / DLL files
