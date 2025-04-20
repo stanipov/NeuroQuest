@@ -42,6 +42,9 @@ CHAR_DESC_STRUCT = {
     "deeper_pains": "describe deeper pains, 1 sentence up to 10 words",
     "deeper_desires": "describe deeper desires, 1 sentence up to 10 words",
     "goal": "describe character's goal in the game, 1 sentence up to 10 words. Character's goal must be something epic and significant",
+    "physical": "describe strength (physical power), dexterity (how agile the character is), endurance, 1 sentence, text only",
+    "mental": " describe intelligence (reasoning and memory), wisdom (perception and insight), 1 sentence, text only",
+    "communication": "describe force of personality, ability to persuade, 5 words",
     "strengths": "1 sentence up to 10 words",
     "weaknesses": "1 sentence up to 10 words",
     "inventory": """describe items the character has, up to 7 items, single string. Follow these rules for forming inventory:
@@ -62,7 +65,10 @@ ANTAGONIST_DESC = {
     "goal": "antagonist's goal in the game. It must be in a clear \
     contradiction to goal of the human player, you must clearly write it.",
     "strengths": "1 sentence up to 10 words",
-    "weaknesses": "1 sentence up to 10 words"
+    "weaknesses": "1 sentence up to 10 words",
+    "physical": "describe strength (physical power), dexterity (how agile the character is), endurance, 1 sentence, text only",
+    "mental": " describe intelligence (reasoning and memory), wisdom (perception and insight), 1 sentence, text only",
+    "communication": "describe force of personality, ability to persuade, 5 words",
 }
 
 
