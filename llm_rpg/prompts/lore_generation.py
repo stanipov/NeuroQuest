@@ -21,12 +21,14 @@ KINGDOM_DESC_STRUCT= {
     "international": "interaction with neighbors (include for each kingdom), up to one sentence, 10 words",
 }
 
+
 # instructions to generate a town in a kingdom
 TOWNS_DESC_STRUCT = {
     "history": "brief history of the town, (1 sentence, max 10 words)",
     "location": "geographical location of the town in the kingdom, up to 10 words",
     "important_places": "important places in the town, up to 1 sentence, max 10 words",
 }
+
 
 # Instructions to generate a character
 # If you want to change it, follow these rules:
@@ -49,6 +51,7 @@ CHAR_DESC_STRUCT = {
 - All inventory elements must fit the goal of the character"""
 }
 
+
 # Instructions to generate human player's antagonist
 # If you want to change it, follow these rules:
 # - never add "name" field, it will break internals
@@ -61,6 +64,24 @@ ANTAGONIST_DESC = {
     "strengths": "1 sentence up to 10 words",
     "weaknesses": "1 sentence up to 10 words"
 }
+
+
+# Instructions to generate an object description
+# Same, never add name field, it is added automatically
+OBJECT_DESC = {
+    "type": "identify type of th object, chose from [armor, weapon, food, drink, \
+magical item, document, book, clothing, medical, tool, other]. 1 word",
+    "description": "Is applicable, provide a brief description. \
+Return empty string if not applicable, otherwise 1 sentence.",
+    "action": "if applicable, provide description how this object acts/works. \
+Return empty string if not applicable, otherwise 1 sentence.",
+    "strength": "if applicable, provide your estimate of strength of this object, \
+e.g weak, moderate, strong, anything else suitable. This is applicable \
+if only the object can be used for battle, healing, casting spells, \
+travelling, consumed as food or drinks; for anything else - it is not applicable"
+}
+
+
 
 # Generic traits/descriptions of kingdoms. The LLM will pick randomly some of these
 kingdoms_traits = """The world has many kingdoms. They can be very different:
@@ -119,10 +140,24 @@ information. You follow following instructions:
 - You never add anything from yourself.
 - You must stay below 5 sentences for each description."""
 
-# A system prompt to generate a literary text based on an outline
-STORY_TELLER_SYS_PRT = """You are an author narrating events based on the provided prompt below. \
-Each section of events should be narrated in the third person limited perspective. \
-The language should be straightforward and to the point."""
+
+# A system prompt to describe objects based on instructions
+# Used in ObjectDescriptor class
+OBJ_ESTIMATOR_SYS_PROMPT = """You are an AI Game Assistant. \
+Your job is to provide description, type of a game object. \
+You will also provide a brief explanation on how it acts/works
+and estimate its strength if applicable.
+
+Some of the requested paramteres could be irrelevant for a given object. \
+You must identify if certain instructions are applicable, if not, \
+your response to these instructions will be empty strings.
+
+Your response follows these generic rules:
+- short and concise
+- only text
+- you never add anything from yourself
+- you carefully follow instruction in your prompt
+- correct spelling errors"""
 ########################################################################################################################
 def gen_world_msgs(world_desc:str) -> List[Dict[str, str]]:
     """
@@ -366,19 +401,24 @@ Provide only a numbered list without any additional words"""
     return [{'role': 'system', 'content': LORE_GEN_SYS_PRT},
             {'role': 'user', 'content': conditions_prt}]
 
-def gen_story_telling_msg(txt: Dict[str, Any]|str) -> List[Dict[str, str]]:
-    """
-    Generates messages to rewrite an outline to an appealing text to show to the human player
-    :param txt: dictionary or a text to rewrite
-    :return: List[Dict[str, Str]]
-    """
-    global STORY_TELLER_SYS_PRT
 
-    task = f"""Rewrite the following outline into a concise, coherent, and engaging literary text:
-{txt}"""
-    if hasattr(txt, 'keys'):
-        task += f"\nYou must include information from these fields in your response: {txt.keys()}."
-    task += "\nWrite 5 sentences maximum."
+def gen_obj_est_msgs(obj: str) -> List[Dict[str, str]]:
+    """
+    Generates messages to prompt for object description
+    :param obj:
+    :return:
+    """
+    global OBJ_ESTIMATOR_SYS_PROMPT, OBJECT_DESC
 
-    return [{'role': 'system', 'content': STORY_TELLER_SYS_PRT},
-            {'role': 'user', 'content': task}]
+    task = f"""Describe the given object: {obj} following these instructions:\n"""
+
+    task += f"name: provide name of the object {obj}. If \"{obj}\" starts with article, remove it. \
+    Remove also all non-relevant parts. \
+    Examples: 1) a huge wooden spear with beautiful and intricate carving --> name: large wooden spear; \
+    2) a battle axe --> name: battle axe \n"
+
+    for key, inst in OBJECT_DESC.items():
+        task += f"{key}: {inst}\n"
+
+    return [{"role": "system", "content": OBJ_ESTIMATOR_SYS_PROMPT},
+            {"role": "user", "content": task}]
