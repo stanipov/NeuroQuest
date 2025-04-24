@@ -11,7 +11,7 @@ These classes provide tools to generate the respective lore part. They are gover
 
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,8 @@ from llm_rpg.prompts.lore_generation import (world_desc_grim,
                                              gen_towns_msgs,
                                              gen_human_char_msgs,
                                              gen_antagonist_msgs,
-                                             gen_condition_end_game)
+                                             gen_condition_end_game,
+                                             gen_npc_behavior_rules)
 from llm_rpg.engine.tools import ObjectDescriptor
 
 from llm_rpg.utils.helpers import (parse_kingdoms_response,
@@ -40,6 +41,7 @@ from llm_rpg.templates.base_client import BaseClient
 
 import random
 from time import sleep
+from copy import deepcopy as dCP
 
 
 class LoreGeneratorGvt:
@@ -102,8 +104,6 @@ class LoreGeneratorGvt:
         # random choice of starting location
         kingdom_name = random.choice(list(self.lore['kingdoms'].keys()))
         town_name = random.choice(list(self.lore['towns'][kingdom_name].keys()))
-        #print(f"Kingdom: {kingdom_name}")
-        #print(f"Town:    {town_name}")
 
         ans = self.char_gen.gen_characters(self.lore, "human",
                                            num_chars=1,
@@ -121,6 +121,36 @@ class LoreGeneratorGvt:
             'town': town_name
         }
         self.game_gen_params.update(self.char_gen.char_gen_params)
+
+
+    def generate_npc(self, num_chars:int=1, **client_kw):
+        if 'start_location' in self.lore and 'human' in self.lore['start_location']:
+            kingdom_name = self.lore['start_location']['human']['kingdom']
+            town_name = self.lore['start_location']['human']['town']
+        else:
+            logger.error(f"You must generate a human character before!")
+            raise KeyError(f"You must generate a human character before!")
+
+        ans = self.char_gen.gen_characters(self.lore, "human",
+                                           num_chars=num_chars,
+                                           kingdom_name=kingdom_name,
+                                           town_name=town_name,
+                                           **client_kw)
+
+        if 'start_location' not in self.lore:
+            self.lore['start_location'] = {}
+
+        if 'npc' not in self.lore['start_location']:
+            self.lore['start_location']['npc'] = {}
+
+        self.lore['npc'] = {}
+
+        for _key in list(ans.keys()):
+            logger.info(f"Adding {_key}")
+            self.lore['npc'][_key] = dCP(ans[_key])
+            self.lore['start_location']['npc'][_key] = {
+                'kingdom': kingdom_name,
+                'town': town_name}
 
 
     def generate_antagonist(self, same_location:bool=True):
@@ -159,6 +189,25 @@ class LoreGeneratorGvt:
         self.game_gen_params.update(self.world_generator.game_gen_params)
 
 
+    def generate_npc_action_rules(self, num_rules:int=5, **client_kw) -> None:
+        """
+        Generates behavioral rules for every NPC
+        :param num_rules:
+        :param client_kw:
+        :return:
+        """
+        if 'npc' in self.lore:
+            if 'npc_rules' not in self.lore:
+                self.lore['npc_rules'] = {}
+            for npc_name in self.lore['npc']:
+                _msg = gen_npc_behavior_rules(self.lore['npc'][npc_name], num_rules)
+                ans = self.client.chat(_msg, **client_kw)
+                self.lore['npc_rules'][npc_name] = ans['message']
+        else:
+            logger.error(f"You must generate NPCs first")
+            raise KeyError(f"You must generate NPCs first")
+
+
     def describe_inventories(self, temperature=0.25):
         """
         TODO: this is a wrapper method which will call a method that describes items (?)
@@ -168,37 +217,52 @@ class LoreGeneratorGvt:
         """
         if 'human_player' in self.lore:
             logger.info(f"Describing inventory items for the human player")
-            inv_items = [x.strip() for x in self.lore['human_player']['inventory'].split(', ')]
+            inv_items = self.lore['human_player']['inventory']
             ans = self.__describe_items(inv_items, temperature)
-            self.lore['inventory_lut'].update(ans)
-            self.lore['human_player']['inventory'] = list(ans.keys())
+            if ans != {}:
+                self.lore['inventory_lut'].update(ans)
+                self.lore['human_player']['inventory'] = list(ans.keys())
 
         if "npc" in self.lore:
             logger.info(f"Describing inventory items fot NPCs")
             for npc in self.lore['npc']:
                 logger.info(f"NPC: {npc}")
-                inv_items = [x.strip() for x in self.lore['npc'][npc]['inventory'].split(', ')]
+                inv_items = self.lore['npc'][npc]['inventory']
                 ans = self.__describe_items(inv_items, temperature)
-                self.lore['inventory_lut'].update(ans)
-                self.lore['npc'][npc]['inventory'] = list(ans.keys())
+                if ans != {}:
+                    self.lore['inventory_lut'].update(ans)
+                    self.lore['npc'][npc]['inventory'] = list(ans.keys())
 
         if "antagonist" in self.lore:
             if 'inventory' in self.lore["antagonist"]:
                 logger.info(f"Describing inventory items for the antagonist")
-                inv_items = [x.strip() for x in self.lore['antagonist']['inventory'].split(', ')]
+                inv_items = self.lore['antagonist']['inventory']
                 ans = self.__describe_items(inv_items, temperature)
-                self.lore['inventory_lut'].update(ans)
-                self.lore['antagonist']['inventory'] = list(ans.keys())
+                if ans != {}:
+                    self.lore['inventory_lut'].update(ans)
+                    self.lore['antagonist']['inventory'] = list(ans.keys())
 
         logger.info(f"Done")
 
 
-    def __describe_items(self, items, temperature=0.25):
+    def __describe_items(self,
+                         items: List[str]|str,
+                         temperature=0.25):
         ans = {}
-        for item in items:
-            _t = self.ObjDesc.describe(item, temperature=temperature)
-            ans[_t['name']] = _t
-            sleep(self.api_delay)
+        inv_items = []
+
+        if type(items) == str:
+            inv_items = [x.strip() for x in items.split(', ')]
+        if type(items) == list:
+            inv_items = dCP(items)
+        if type(items) not in (str, list):
+            logger.error(f"Inventory items must be str or list, got {type(items)}")
+        else:
+            for item in inv_items:
+                _t = self.ObjDesc.describe(item, temperature=temperature)
+                ans[_t['name']] = _t
+                sleep(self.api_delay)
+
         return ans
 
 

@@ -429,3 +429,24 @@ def gen_obj_est_msgs(obj: str) -> List[Dict[str, str]]:
 
     return [{"role": "system", "content": OBJ_ESTIMATOR_SYS_PROMPT},
             {"role": "user", "content": task}]
+
+def gen_npc_behavior_rules(npc:Dict[str, str],
+                           num_rules:int=5) -> List[Dict[str, str]]:
+    """
+    Generates behavioral rules and principles for an NPC. These will be used later
+    to model NPC's actions and interaction with the world and the human player.
+    :param npc:
+    :param num_rules:
+    :return:
+    """
+    npc_behavior_task = f"""Generate list of {num_rules} behavioral traits for this NPC:
+    {npc}
+
+These traits will be used by a game master to predict behavior of the NPC and its interaction with \
+other characters. Your response will be used by another AI/LLM model to generate the character's \
+actions in the game or response to the human player.
+
+Respond with the numbered list only"""
+
+    return [{'role': 'system', 'content': LORE_GEN_SYS_PRT},
+            {'role': 'user', 'content': npc_behavior_task}]
