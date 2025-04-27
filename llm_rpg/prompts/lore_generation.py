@@ -450,3 +450,57 @@ Respond with the numbered list only"""
 
     return [{'role': 'system', 'content': LORE_GEN_SYS_PRT},
             {'role': 'user', 'content': npc_behavior_task}]
+
+
+def gen_entry_point_msg(world_desc,
+                        human_player,
+                        human_start_k,
+                        k_desc,
+                        human_start_t,
+                        t_desc,
+                        npcs_desc,
+                        npc_start_location):
+    """
+    Messages to generate the starting point
+
+    :param world_desc: dict, description of the world
+    :param human_player: dict: human player character card
+    :param human_start_k: str: kingdom start
+    :param k_desc: dict: description of the kingdom
+    :param human_start_t: start: starting town
+    :param t_desc: dict: starting town description
+    :param npcs_desc: dict: npc description cards
+    :param npc_start_location: dict: start location of the npcs
+    :return:
+    """
+
+    global LORE_GEN_SYS_PRT
+
+    entry_point_prt = f"""Generate a starting point for the game.
+
+This is the world:
+{world_desc}
+
+This is the human playr:
+{human_player}
+Starting in: 
+Kingdom: {human_start_k}
+{k_desc}
+Town: {human_start_t}
+{t_desc}
+
+These are player's allies (NPCs):
+{npcs_desc}
+They start in:
+{npc_start_location}
+
+Follow these instructions:
+- write 10 sentences
+- the story shall provide a starting point for the further story
+- provide location information
+- mention your allies
+- mention location of player's allies (if known)
+- Write always in third person language"""
+
+    return [{'role': 'system', 'content': LORE_GEN_SYS_PRT},
+            {'role': 'user', 'content': entry_point_prt}]

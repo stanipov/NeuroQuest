@@ -11,6 +11,7 @@ These classes provide tools to generate the respective lore part. They are gover
 
 
 import logging
+import time
 from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,8 @@ from llm_rpg.prompts.lore_generation import (world_desc_grim,
                                              gen_human_char_msgs,
                                              gen_antagonist_msgs,
                                              gen_condition_end_game,
-                                             gen_npc_behavior_rules)
+                                             gen_npc_behavior_rules,
+                                             gen_entry_point_msg)
 from llm_rpg.engine.tools import ObjectDescriptor
 
 from llm_rpg.utils.helpers import (parse_kingdoms_response,
@@ -266,6 +268,41 @@ class LoreGeneratorGvt:
         return ans
 
 
+    def gen_starting_point(self, **client_kw):
+        """
+        Generates the starting point for the game
+        :param client_kw:
+        :return:
+        """
+        human_player = self.lore['human_player']
+        human_start_k = self.lore['start_location']['human']['kingdom']
+        human_start_t = self.lore['start_location']['human']['town']
+
+        k_desc = self.lore['kingdoms'][human_start_k]
+        t_desc = self.lore['towns'][human_start_k][human_start_t]
+        world_desc = self.lore['world']
+
+        if "npc" in self.lore:
+            npcs_desc = self.lore['npc']
+            npc_start_location = self.lore["start_location"]['npc']
+        else:
+            npcs_desc = {}
+            npc_start_location = {}
+
+        entry_msgs = gen_entry_point_msg(world_desc,
+                                         human_player,
+                                         human_start_k,
+                                         k_desc,
+                                         human_start_t,
+                                         t_desc,
+                                         npcs_desc,
+                                         npc_start_location)
+
+        ans = self.client.chat(entry_msgs, **client_kw)
+        self.game_gen_params.update(entry_msgs)
+        self.lore['start'] = ans['message']
+
+
 class GenerateWorld:
     def __init__(self, client: BaseClient, **kwargs):
         """Init the class. Not sure what shall be here"""
@@ -275,6 +312,12 @@ class GenerateWorld:
         # defaults
         self.expected_flds_kingdoms_def = set(KINGDOM_DESC_STRUCT.keys())
         self.expected_flds_towns_def = set(TOWNS_DESC_STRUCT.keys())
+
+        # api delay to respect the rate limits
+        if "api_delay" in kwargs:
+            self.api_delay = kwargs.pop('api_delay')
+        else:
+            self.api_delay = 0
 
 
     def gen_world(self, world_desc: str, **client_kw):
@@ -335,6 +378,7 @@ class GenerateWorld:
         for kingdom in self.game_lore['kingdoms']:
             logger.info(f"Generating {num_towns} towns for {kingdom}")
             msg_towns_k = gen_towns_msgs(num_towns, self.game_lore['world'], self.game_lore['kingdoms'], kingdom)
+            time.sleep(self.api_delay)
             towns_raw_response = self.client.chat(msg_towns_k, **client_kw)
             logger.debug(f"Prompt tokens: {towns_raw_response['stats']['prompt_tokens']}")
             logger.debug(f"Eval tokens: {towns_raw_response['stats']['eval_tokens']}")
