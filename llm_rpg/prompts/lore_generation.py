@@ -34,6 +34,7 @@ TOWNS_DESC_STRUCT = {
 # If you want to change it, follow these rules:
 # - never add "name" field, it will break internals
 # - "goal" field with the relevant description must be present, as its absence will break internals
+STARTING_FUNDS = (20, 40)
 CHAR_DESC_STRUCT = {
     "gender": "character's gender, pick from: male",
     "occupation": "pick one or two from warrior, researcher, magician, crook, theft, outcast",
@@ -47,12 +48,13 @@ CHAR_DESC_STRUCT = {
     "communication": "describe force of personality, ability to persuade, 5 words",
     "strengths": "1 sentence up to 10 words",
     "weaknesses": "1 sentence up to 10 words",
+    "money": f"a number, pick between [{STARTING_FUNDS[0]}, {STARTING_FUNDS[1]}]",
     "inventory": """describe items the character has, up to 7 items, single string. Follow these rules for forming inventory:
 - Inventory must be in a reasonable agreement with character's goals, occupation, and biography. 
 - If the player is a warrior, it shall include armor (never leather!!!) and a weapon (always made of a metal or alloy, never bone, wood)
 - If a player is a magician, the inventory must include relevant magical items
 - All inventory elements must fit the goal of the character
-- list all items comma separated; never use 'and'"""
+- list all items comma separated; never use 'and' """
 }
 
 

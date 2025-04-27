@@ -219,6 +219,7 @@ class LoreGeneratorGvt:
         """
         if 'human_player' in self.lore:
             logger.info(f"Describing inventory items for the human player")
+            self.lore['human_player']['money'] = int(self.lore['human_player']['money'])
             inv_items = self.lore['human_player']['inventory']
             ans = self.__describe_items(inv_items, temperature)
             if ans != {}:
@@ -229,6 +230,7 @@ class LoreGeneratorGvt:
             logger.info(f"Describing inventory items fot NPCs")
             for npc in self.lore['npc']:
                 logger.info(f"NPC: {npc}")
+                self.lore['npc'][npc]['money'] = int(self.lore['npc'][npc]['money'])
                 inv_items = self.lore['npc'][npc]['inventory']
                 ans = self.__describe_items(inv_items, temperature)
                 if ans != {}:
@@ -299,7 +301,7 @@ class LoreGeneratorGvt:
                                          npc_start_location)
 
         ans = self.client.chat(entry_msgs, **client_kw)
-        self.game_gen_params.update(entry_msgs)
+        self.game_gen_params['start'] = entry_msgs
         self.lore['start'] = ans['message']
 
 
@@ -364,7 +366,7 @@ class GenerateWorld:
                   num_towns,
                   **client_kw):
         """
-        Generates towns for each kingdom. Provide number of towns.
+        Generates towns for each kingdom. Provide a number of towns.
         TBD: a single number for all kingdoms or introduce some variability. Issue with variability
         is that for small numbers random choices do not look that random
 
@@ -416,6 +418,8 @@ class GenerateWorld:
             except Exception as e:
                 logger.error(f"Could not generate conditions to \"{kind}\" with \"{e}\" error")
                 raise ValueError(f"Could not generate conditions to \"{kind}\" with \"{e}\" error")
+            logger.info(f"Sleeping {self.api_delay} sec")
+            time.sleep(self.api_delay)
         logger.info("Done")
 
 
