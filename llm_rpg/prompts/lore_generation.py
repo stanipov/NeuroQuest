@@ -35,6 +35,7 @@ TOWNS_DESC_STRUCT = {
 # - never add "name" field, it will break internals
 # - "goal" field with the relevant description must be present, as its absence will break internals
 STARTING_FUNDS = (20, 40)
+NUM_INV_ITEMS = 7
 CHAR_DESC_STRUCT = {
     "gender": "character's gender, pick from: male",
     "occupation": "pick one or two from warrior, researcher, magician, crook, theft, outcast",
@@ -49,12 +50,17 @@ CHAR_DESC_STRUCT = {
     "strengths": "1 sentence up to 10 words",
     "weaknesses": "1 sentence up to 10 words",
     "money": f"a number, pick between [{STARTING_FUNDS[0]}, {STARTING_FUNDS[1]}]",
-    "inventory": """describe items the character has, up to 7 items, single string. Follow these rules for forming inventory:
+    "inventory": f"""describe items the character has, up to {NUM_INV_ITEMS} items, single string. \
+Follow these rules for forming inventory:
 - Inventory must be in a reasonable agreement with character's goals, occupation, and biography. 
-- If the player is a warrior, it shall include armor (never leather!!!) and a weapon (always made of a metal or alloy, never bone, wood)
+- If the player is a warrior, it shall include armor (always made of metal or alloy only!) and a weapon \
+(always made of a metal or alloy only). 
+- These materials are forbidden for armor and weapons: bones, wood, leather, silver, gold, copper
+- These materials are forbidden for weapons: bones, wood, silver, gold, copper
+- These materials are forbidden for armor: bones, wood, leather for armor, silver, gold, copper
 - If a player is a magician, the inventory must include relevant magical items
 - All inventory elements must fit the goal of the character
-- list all items comma separated; never use 'and' """
+- List all items comma separated; never use 'and' """
 }
 
 
@@ -91,17 +97,17 @@ travelling, consumed as food or drinks; for anything else - it is not applicable
 }
 
 
-
 # Generic traits/descriptions of kingdoms. The LLM will pick randomly some of these
 kingdoms_traits = """The world has many kingdoms. They can be very different:
 1. magic, they rely on solving their problems on magic. Magicians are very respected
-2. militaristic, they have very strong armies, excell in warfare, tactics. They can be very aggressive towards \
+2. militaristic, they have very strong armies, excel in warfare, tactics. They can be very aggressive towards \
 other parties.
 3. diplomatic, these can trick anyone. They are very good in deception and plots against others. You never know \
 what's happening till it's too late.
 4. technology, they combine magic and technology, scientific inquiry is highly valued. These places \
 are known for mass production and highly educated people. Their armies are strong and fearsome, but they \
 are not interested in conquests, they want trade and earn money."""
+
 
 # World descriptions
 # Inspired by Terry Pratchett
@@ -421,10 +427,11 @@ def gen_obj_est_msgs(obj: str) -> List[Dict[str, str]]:
 
     task = f"""Describe the given object: {obj} following these instructions:\n"""
 
-    task += f"name: provide name of the object {obj}. If \"{obj}\" starts with article, remove it. \
-    Remove also all non-relevant parts. \
-    Examples: 1) a huge wooden spear with beautiful and intricate carving --> name: large wooden spear; \
-    2) a battle axe --> name: battle axe 3) silver-plated plate armor --> name: plate armor\n"
+    task += f"""name: provide name of the object {obj}. If \"{obj}\" starts with article, remove it. \
+Remove also all non-relevant parts such as additional descriptions or material.
+Examples: 1) a huge wooden spear with beautiful and intricate carving --> name: large wooden spear; \
+2) a battle axe --> name: battle axe; 3) silver-plated plate armor --> name: plate armor; \
+4) steel sword --> sword"""
 
     for key, inst in OBJECT_DESC.items():
         task += f"{key}: {inst}\n"

@@ -49,6 +49,8 @@ def parse2structure(raw_response:str, expected_fields: Set[str]) ->Dict[str,str]
     :return:
     """
     struct_ans = {}
+    chars = "*#/"
+    str_trans_map = str.maketrans('', '', chars)
     for kg in raw_response.split('\n\n'):
 
         if len(kg) > 1:
@@ -56,6 +58,8 @@ def parse2structure(raw_response:str, expected_fields: Set[str]) ->Dict[str,str]
             _name = items[0].split(':')[-1].strip()
 
             if _name != '':
+                # strip from leftovers of markdowns or wierd chars
+                _name = _name.translate(str_trans_map).strip()
                 struct_ans[_name] = {'name': _name}
 
                 for x in items[1:]:
