@@ -264,6 +264,8 @@ class LoreGeneratorGvt:
         else:
             for item in inv_items:
                 _t = self.ObjDesc.describe(item, temperature=temperature)
+                # capitalize each inventory title
+                _t['name'] = _t['name'].title()
                 ans[_t['name']] = _t
                 sleep(self.api_delay)
 

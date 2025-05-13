@@ -65,7 +65,7 @@ def parse2structure(raw_response:str, expected_fields: Set[str]) ->Dict[str,str]
                 for x in items[1:]:
                     try:
                         fld, s = x.split(':')
-                        fld = fld.replace('\'', '').lower()
+                        fld = fld.replace('\'', '').lower().translate(str_trans_map)
                         if fld in expected_fields:
                             struct_ans[_name][fld] = s.strip()
                     except Exception as e:
