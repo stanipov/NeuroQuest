@@ -1,9 +1,19 @@
 from typing import List, Dict, Any
 from groq import Groq
+import pydantic
+from openai import responses
+
 from ..templates.base_client import BaseClient
 from groq.types.chat import ChatCompletion
 import logging
 logger = logging.getLogger(__name__)
+
+try:
+    import instructor
+    F_IS_SRUCT = True
+except Exception as e:
+    logger.warning(f"\"instructor\" is not installed, no structured output!")
+    F_IS_SRUCT = False
 
 class GroqW(BaseClient):
     def __init__(self, model_name,
@@ -16,6 +26,11 @@ class GroqW(BaseClient):
         self._T = 0.5
         if 'temperature' in kwargs:
             self._T = kwargs['temperature']
+
+        if F_IS_SRUCT:
+            self.struct_client = instructor.from_groq(self.client)
+        else:
+            self.struct_client = None
 
     def set_model(self, model_name):
         self.model_name = model_name
@@ -61,6 +76,36 @@ class GroqW(BaseClient):
         }
 
         return response
+
+    def struct_output(self, messages: List[Dict[Any, Any]],
+                        pydantic_model: pydantic.BaseModel,
+                        *args, **kwargs) -> Dict[str, Any]:
+        if 'temperature' in kwargs:
+            temp = kwargs.pop('temperature')
+        else:
+            temp = self._T
+        # exclude possible streaming
+        if "stream" in kwargs:
+            _ = kwargs.pop('stream')
+
+        ans = {
+            "message": None,
+            "stats": None
+        }
+
+        if self.struct_client is not None:
+            response = None
+            try:
+                response = self.struct_client.chat.completions.create(model=self.model_name,
+                                                             messages=messages,
+                                                             response_model=pydantic_model,
+                                                             temperature=temp, **kwargs)
+            except Exception as e:
+                logger.warning(f"Failed to extract structured output, returning None. Error: {e}")
+
+            ans['message'] = response
+
+        return ans
 
     def stream(self, messages: List[Dict[Any, Any]], *args, **kwargs) -> ChatCompletion:
         """
