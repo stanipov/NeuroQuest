@@ -19,6 +19,9 @@ from llm_rpg.utils.helpers import parse2structure
 
 
 class ObjectDescriptor:
+    """
+    Generates descriptions and actions for a list of items (e.g. axe, spell, etc)
+    """
     def __init__(self, client: BaseClient) -> None:
         global OBJECT_DESC
         self.client = client
