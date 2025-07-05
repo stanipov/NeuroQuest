@@ -1,5 +1,11 @@
 """
 Classes to address I/O operations
+
+This class keeps track of all games and folders for each session.
+Each subfolder is intended to keep
+- lore
+- game state database
+- anything deemed necessary in future developments
 """
 
 import os, pickle, json
@@ -85,7 +91,7 @@ class IO:
         """
         Adds a new game session to the tracker.
         It will also create the corresponding folder
-        and set the self.if and self.folder to the new values
+        and set the self.id and self.folder to the new values
         :return:
         """
         _new_game = self.__new_game()
