@@ -3,11 +3,12 @@ Classes/methods to work with memory
 """
 
 from itertools import cycle
-from typing import List, Dict, Any, Type
+from typing import List, Dict, Any, Type, Tuple
 
 from sqlalchemy import create_engine, Column, String, Text, MetaData, ForeignKey, Float, Integer, Table
 from sqlalchemy.orm import sessionmaker, DeclarativeBase, relationship
 from sqlalchemy.inspection import inspect
+from sqlalchemy import select
 
 # ----------------------------- Module logging -----------------------------
 import logging
@@ -267,7 +268,6 @@ class SQLMemory:
             try:
                 pk_columns = self.primary_keys(table_name)
                 query = session.query(model).order_by(*[getattr(model, col).desc() for col in pk_columns]).limit(n)
-                rows = query.all()
                 for item in query.all():
                     result.append({col.name: getattr(item, col.name) for col in model.__table__.columns})
             except Exception as e:
@@ -319,18 +319,45 @@ class SQLMemory:
 # ----------------------------- Memory for the game -----------------------------
 
 # RAG augmented memory is planned
-
+from llm_rpg.prompts.lore_generation import OBJECT_DESC
 class GameMemorySimple(SQLMemory):
-    def __init__(self, db_path):
+    def __init__(self, db_path, npc_names: List[str] = []):
         super().__init__(db_path)
 
-    def create_inventory(self, items_tbl: Dict[str, Any], inventory_tbl: Dict[str, Any]):
+        self.inventory_schema = {
+            "character": str,
+            "item": str,
+            "count": int
+        }
+        self.inventory_pk = ["character", "item"]
+        self.inventory_tbl_name = "inventory"
+
+
+        self.items_schema = {
+            "name": str, # <-- 'name' field from ObjectDescriptor.describe()
+        }
+        for x in OBJECT_DESC.keys():
+            self.items_schema[x] = str
+        self.items_pk = ['name']
+        self.items_tbl_name = "items"
+
+        self.history_schema = {"turn": int,
+                               "ai_response": str,
+                               "human_response": str}
+        if npc_names != [] or npc_names is not None:
+            for npc_name in npc_names:
+                self.history_schema[npc_name] = str
+        self.history_pk = ['turn']
+        self.history_tbl_name = 'history'
+
+
+    def create_inventory(self):
         """
         Build inventory and items tables.
         Inventory:
             character: str: Player/NPC name
             item: str: item name, e.g. "axe", etc.
-            money: int: funds of the character
+            count: int: count of the items
             -- primary keys: character, item
         Items:
             item: str: name of the item
@@ -339,99 +366,134 @@ class GameMemorySimple(SQLMemory):
             action: str: how the item works
             strength: str: effect of the item
             -- primary key: item
-
-        :param items_tbl: Dict[str, Any] -- a nested dictionary with all parameters for "items" table.
-                These are packed parameters for SQLMemory.create_table()
-                items_tbl['columns'] -->  columns: Dict[str, str] -- dictionary containing column names and their datatypes
-                items_tbl['primary_keys'] --> primary_keys: List[str] -- list of primary keys
-                items_tbl['index_keys']: List[str] --> index_keys: List[str] -- list of index columns, optional
-                items_tbl['foreign_keys']: Dict[str, str] --> foreign_keys: Dict[str, str] -- dictionary of foreign keys (names and their data types)
-        :param inventory_tbl: Dict[str, Any] -- a nested dictionary with all parameters for "inventory" table. Same structure is expected.
-        :return:
+        :return: None
         """
         # First create items table (because inventory depends on it)
-        logger.info("Creating the \"items\" table")
-        self.create_table(table_name="items",
-                          columns=items_tbl['columns'],
-                          primary_keys=items_tbl['primary_keys'],
-                          index_keys=items_tbl.get('index_keys', []),
-                          foreign_keys=items_tbl.get('foreign_keys', None))
+        logger.info(f"Creating the \"{self.items_tbl_name}\" table")
+        self.create_table(table_name=self.items_tbl_name,
+                          columns=self.items_schema,
+                          primary_keys=self.items_pk,
+                          index_keys=[],
+                          foreign_keys=None)
 
         # Now create inventory table
-        logger.info("Creating the \"inventory\" table")
-        self.create_table(table_name="inventory",
-                          columns=inventory_tbl['columns'],
-                          primary_keys=inventory_tbl['primary_keys'],
-                          index_keys=inventory_tbl.get('index_keys', []),
-                          foreign_keys=inventory_tbl.get('foreign_keys', None))
-
-        logger.info(f"Relating the tables")
-
-        if not hasattr(self.models["items"], "inventory_entries"):
-            self.models["items"].inventory_entries = relationship(
-                self.models["inventory"],
-                back_populates="item_ref",  # NOTE: changed from 'item' to 'item_ref'
-                cascade="all, delete",
-                passive_deletes=True
-            )
-
-        if not hasattr(self.models["inventory"], "item_ref"):
-            self.models["inventory"].item_ref = relationship(
-                self.models["items"],
-                back_populates="inventory_entries"
-            )
+        logger.info(f"Creating the \"{self.inventory_tbl_name}\" table")
+        self.create_table(table_name=self.inventory_tbl_name,
+                          columns=self.inventory_schema,
+                          primary_keys=self.inventory_pk,
+                          index_keys=[],
+                          foreign_keys=None)
 
 
-    def create_messages(self, npc_names:List[str] = []):
-        _schema = {"turn": int,
-                   "ai_response": str,
-                   "human_response": str}
-        if npc_names != []:
-            for npc_name in npc_names:
-                _schema[npc_name] = str
-        logger.info('Creating \"messages\" table')
-        self.create_table(table_name="messages",
-                          columns=_schema,
+    def create_history(self):
+        """
+        Creates "history" table which will store all message/actions in the game
+        
+        :param npc_names: 
+        :return: 
+        """
+        logger.info(f'Creating \"{self.history_tbl_name}\" table')
+        self.create_table(table_name=self.history_tbl_name,
+                          columns=self.history_schema,
                           primary_keys=["turn"],
                           index_keys=["turn"])
-        self.messages_shema = _schema
 
 
-    def update_inventory(self, character: str, inventory: List[str], items: Dict[str, Dict[str, str]]):
-        items_model = self.models["items"]
-        inventory_model = self.models["inventory"]
+    def add_inventory_items(self, character: str,
+                            items: Dict[str, int],
+                            items_lut: Dict[str, Dict[str, str]]):
+        """
+        Adds items to the inventory alongside with items LUT
+        :param character: character name
+        :param items: Dict[str, int] -- items to add along with their count
+        :param items_lut: Dict[str, Dict[str, str]] -- LUT as provided by ObjectDescriptor.describe() method.
+        :return: None
+        """
 
+        for item in items:
+            row = {
+                "character": character,
+                "item": item,
+                "count": items[item]
+            }
+            try:
+                self.add_row("inventory", row, strict=True)
+            except Exception as e:
+                if not "UNIQUE constraint failed" in str(e):
+                    raise e
+                else:
+                    logger.debug(f"{item} exists in the inventory table, skipping")
+
+        for item in items_lut:
+            row = {
+                "name": item
+            }
+            for x in self.items_schema:
+                if x != 'name':
+                    row[x] = items_lut[item][x]
+            try:
+                self.add_row("items", row, strict=True)
+            except Exception as e:
+                if not "UNIQUE constraint failed" in str(e):
+                    raise e
+                else:
+                    logger.debug(f"{item} exists in the inventory table, skipping")
+
+
+    def remove_inventory_items(self, character: str, items: List[str]):
+        """
+        Removes inventory items in the inventory and the items tables
+
+        :param character: character to remove items for
+        :param items: list of items to remove
+        :return:
+        """
+        rows2del_inventory = []
+        rows2del_items = []
+        # Yes, this is hardcoded
+        for item in items:
+            rows2del_inventory.append({
+                "character": character,
+                "item": item})
+            rows2del_items.append({"name": item})
+
+        # 1. inventory table
+        self.remove_rows("inventory", rows2del_inventory)
+        # 2. items table
+        self.remove_rows("items", rows2del_items)
+
+    def get_inventory_items(self, character: str) -> List[Dict[str, Any]]:
+        result = []
+        inventory = self.models[self.inventory_tbl_name].__table__
+        items = self.models[self.items_tbl_name].__table__
         with self.Session() as session:
-            # Step 1: Insert/Skip items
-            for item_name, item_data in items.items():
-                try:
-                    self.add_row("items", {"item": item_name, **item_data})
-                except ValueError as e:
-                    if "already exists" not in str(e):
-                        raise
+            inv_columns = [inventory.c[col.name] for col in inventory.columns]
+            item_columns = [col for col in items.columns if col.name != "name"]
+            stmt = (
+                select(*inv_columns, *item_columns)
+                .join(items, inventory.c.item == items.c.name)
+                .where(inventory.c.character == character)
+            )
+            ans = session.execute(stmt)
+            for row in ans:
+                result.append(dict(row._mapping))
 
-            # Step 2: Existing inventory entries for this character
-            existing_entries = session.query(inventory_model).filter(inventory_model.character == character).all()
-            existing_item_names = {entry.item for entry in existing_entries}
+        return result
 
-            # Step 3: Add new inventory items
-            for item_name in inventory:
-                if item_name not in existing_item_names:
-                    try:
-                        self.add_row("inventory", {
-                            "character": character,
-                            "item": item_name
-                        })
-                    except ValueError as e:
-                        if "already exists" not in str(e):
-                            raise
+    def get_most_recent_turn(self) -> Tuple[int, bool]:
+        """
+        Finds the latest turn number in the self.history_tbl_name
+        :return: int -- last registered turn in the self.history_tbl_name
+        """
+        # read the DB to find the latest turn number
+        last_row = self.get_last_n_rows(self.history_tbl_name, 1)
+        if last_row != []:
+            turn = last_row[0]['turn']
+        else:
+            logger.info(f"No rows found in \"{self.history_tbl_name}\" table. Setting \"turn\" to 0")
+            turn = 0
+        return turn, last_row != []
 
-            # Step 4: Remove items that are no longer in inventory
-            to_remove = [entry for entry in existing_entries if entry.item not in inventory]
-            for entry in to_remove:
-                session.delete(entry)
-
-            session.commit()
 
     def add_new_turn(self, messages: List[Dict[str, Any]], turn: int = -1):
         """
@@ -440,7 +502,7 @@ class GameMemorySimple(SQLMemory):
             [{'role': 'r1', 'message': msg1}, {'role': 'r2', 'message': msg2}]
         Here:
             - 'role' either 'ai_response', 'human_response', or <actual NPC name>
-            - 'message' -- 'role' utterance
+            - 'message' -- role's utterance
 
         :param messages:
         :param turn:
@@ -449,22 +511,19 @@ class GameMemorySimple(SQLMemory):
 
         # "turn" is a primary key for the messages table
         if turn == -1:
-            # read the DB to find the latest turn number
-            last_row = self.get_last_n_rows("messages", 1)
-            if last_row != []:
-                turn = last_row[0]
-            else:
-                logger.info(f"No rows found in \"messages\" table. Setting \"turn\" to 0")
-                turn = 0
+            turn, last_row_not_empty = self.get_most_recent_turn()
+            if last_row_not_empty != []:
+                turn += 1
 
         row = {'turn': turn}
+        logger.debug(f"Game turn: {turn}")
         for msg in messages:
-            if msg['role'] not in self.messages_shema:
+            if msg['role'] not in self.history_schema:
                 logger.error(f"{msg['role']} is not within acceptable shema!")
                 raise ValueError(f"{msg['role']} is not within acceptable shema!")
 
             row[msg['role']] = msg['message']
-        self.add_row("messages", row, True)
+        self.add_row(self.history_tbl_name, row, True)
 
 
     def update_turn(self, messages: List[Dict[str, Any]], turn: int = -1):
@@ -480,26 +539,22 @@ class GameMemorySimple(SQLMemory):
         :param turn:
         :return:
         """
+
         # "turn" is a primary key for the messages table
         if turn == -1:
             # read the DB to find the latest turn number
-            last_row = self.get_last_n_rows("messages", 1)
-            if last_row != []:
-                turn = last_row[0]
-            else:
-                logger.info(f"No rows found in \"messages\" table. Setting \"turn\" to 0")
-                turn = 0
-        _table_name = 'messages'
+            turn, _ = self.get_most_recent_turn()
+
         _strict = True
         row = {
             'turn': turn
         }
 
         for msg in messages:
-            if msg['role'] not in self.messages_shema:
+            if msg['role'] not in self.history_schema:
                 logger.error(f"{msg['role']} is not within acceptable shema!")
                 raise ValueError(f"{msg['role']} is not within acceptable shema!")
 
             row[msg['role']] = msg['message']
 
-        self.update_row(_table_name, row, _strict)
+        self.update_row(self.history_tbl_name, row, _strict)
