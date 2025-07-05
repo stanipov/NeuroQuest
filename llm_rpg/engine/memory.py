@@ -126,13 +126,13 @@ class SQLMemory:
                              }
                              )
                 self.models[tbl_name] = model
-            logger.info(f"Loaded {len(self.models)} existing table(s): {list(self.models).keys()}")
+            logger.info(f"Loaded {len(self.models)} existing table(s): {list(self.models.keys())}")
 
     def create_table(self,
                      table_name: str,
                      columns: Dict[str, Any],
                      primary_keys: List[str],
-                     index_keys: List[str] = [],
+                     index_keys=None,
                      foreign_keys: Dict[str, str] = None) -> None:
         """
         Creates a dynamic ORM model for a table and registers it with the database.
@@ -143,6 +143,8 @@ class SQLMemory:
         :param foreign_keys: Dict[str, str] -- dictionary of foreign keys (names and their data types)
         :return: None
         """
+        if index_keys is None:
+            index_keys = []
         if table_name not in self.models:
             sqlalchemy_columns = []
 
@@ -207,9 +209,12 @@ class SQLMemory:
                    row: Dict[str, Any],
                    strict: bool=True) -> None:
         """
-        Updates an entry in the table.
+        Updates an entry in the table. Strict mode is recommended.
+
         :param table_name: str -- table name.
-        :param row: Dict[str, Any] -- row to update
+        :param row: Dict[str, Any] -- row to update. If strict==True, the row[] must contain all primary keys.
+                                      The row can contain only the column to update (but must contain the primary keys
+                                      in strict mode)
         :param strict: bool -- will enforce of primary keys in the input data. Default: True.
         :return: None
         """
@@ -217,21 +222,21 @@ class SQLMemory:
             logger.warning(f"\"{table_name}\" is not found!")
             return
         model = self.models[table_name]
+        pk_columns = self.primary_keys(table_name)
 
-        if strict:
-            pk_columns = self.primary_keys(table_name)
-            if not all(pk in row for pk in pk_columns):
-                raise KeyError(f"Missing primary key fields: expected {pk_columns}, got {list(row.keys())}")
+        if strict and pk_columns and not all(pk in row for pk in pk_columns):
+            raise KeyError(f"Missing primary key fields: expected {pk_columns}, got {list(row.keys())}")
 
         with self.Session() as session:
             try:
-                # Build query to locate the row
-                pk_filter = {pk: row[pk] for pk in pk_columns}
-                obj = session.query(model).filter_by(**pk_filter).one_or_none()
-
-                if not obj:
-                    logger.error(f"Row with primary key {pk_filter} not found in table \"{table_name}\".")
-                    raise ValueError(f"Row with primary key {pk_filter} not found in table \"{table_name}\".")
+                if pk_columns:
+                    # Use PK to find the row
+                    pk_filter = {pk: row[pk] for pk in pk_columns}
+                    obj = session.query(model).filter_by(**pk_filter).one_or_none()
+                else:
+                    # No PKs: use first row that matches all fields in `row`
+                    filter_fields = {k: v for k, v in row.items()}
+                    obj = session.query(model).filter_by(**filter_fields).first()
 
                 # Update the fields
                 for key, value in row.items():
@@ -313,6 +318,188 @@ class SQLMemory:
 
 # ----------------------------- Memory for the game -----------------------------
 
-class GameMemory(SQLMemory):
+# RAG augmented memory is planned
+
+class GameMemorySimple(SQLMemory):
     def __init__(self, db_path):
-        super.__init__(db_path)
+        super().__init__(db_path)
+
+    def create_inventory(self, items_tbl: Dict[str, Any], inventory_tbl: Dict[str, Any]):
+        """
+        Build inventory and items tables.
+        Inventory:
+            character: str: Player/NPC name
+            item: str: item name, e.g. "axe", etc.
+            money: int: funds of the character
+            -- primary keys: character, item
+        Items:
+            item: str: name of the item
+            description: str: item description
+            type: str: type of item, e.g. weapon/armor/...
+            action: str: how the item works
+            strength: str: effect of the item
+            -- primary key: item
+
+        :param items_tbl: Dict[str, Any] -- a nested dictionary with all parameters for "items" table.
+                These are packed parameters for SQLMemory.create_table()
+                items_tbl['columns'] -->  columns: Dict[str, str] -- dictionary containing column names and their datatypes
+                items_tbl['primary_keys'] --> primary_keys: List[str] -- list of primary keys
+                items_tbl['index_keys']: List[str] --> index_keys: List[str] -- list of index columns, optional
+                items_tbl['foreign_keys']: Dict[str, str] --> foreign_keys: Dict[str, str] -- dictionary of foreign keys (names and their data types)
+        :param inventory_tbl: Dict[str, Any] -- a nested dictionary with all parameters for "inventory" table. Same structure is expected.
+        :return:
+        """
+        # First create items table (because inventory depends on it)
+        logger.info("Creating the \"items\" table")
+        self.create_table(table_name="items",
+                          columns=items_tbl['columns'],
+                          primary_keys=items_tbl['primary_keys'],
+                          index_keys=items_tbl.get('index_keys', []),
+                          foreign_keys=items_tbl.get('foreign_keys', None))
+
+        # Now create inventory table
+        logger.info("Creating the \"inventory\" table")
+        self.create_table(table_name="inventory",
+                          columns=inventory_tbl['columns'],
+                          primary_keys=inventory_tbl['primary_keys'],
+                          index_keys=inventory_tbl.get('index_keys', []),
+                          foreign_keys=inventory_tbl.get('foreign_keys', None))
+
+        logger.info(f"Relating the tables")
+
+        if not hasattr(self.models["items"], "inventory_entries"):
+            self.models["items"].inventory_entries = relationship(
+                self.models["inventory"],
+                back_populates="item_ref",  # NOTE: changed from 'item' to 'item_ref'
+                cascade="all, delete",
+                passive_deletes=True
+            )
+
+        if not hasattr(self.models["inventory"], "item_ref"):
+            self.models["inventory"].item_ref = relationship(
+                self.models["items"],
+                back_populates="inventory_entries"
+            )
+
+
+    def create_messages(self, npc_names:List[str] = []):
+        _schema = {"turn": int,
+                   "ai_response": str,
+                   "human_response": str}
+        if npc_names != []:
+            for npc_name in npc_names:
+                _schema[npc_name] = str
+        logger.info('Creating \"messages\" table')
+        self.create_table(table_name="messages",
+                          columns=_schema,
+                          primary_keys=["turn"],
+                          index_keys=["turn"])
+        self.messages_shema = _schema
+
+
+    def update_inventory(self, character: str, inventory: List[str], items: Dict[str, Dict[str, str]]):
+        items_model = self.models["items"]
+        inventory_model = self.models["inventory"]
+
+        with self.Session() as session:
+            # Step 1: Insert/Skip items
+            for item_name, item_data in items.items():
+                try:
+                    self.add_row("items", {"item": item_name, **item_data})
+                except ValueError as e:
+                    if "already exists" not in str(e):
+                        raise
+
+            # Step 2: Existing inventory entries for this character
+            existing_entries = session.query(inventory_model).filter(inventory_model.character == character).all()
+            existing_item_names = {entry.item for entry in existing_entries}
+
+            # Step 3: Add new inventory items
+            for item_name in inventory:
+                if item_name not in existing_item_names:
+                    try:
+                        self.add_row("inventory", {
+                            "character": character,
+                            "item": item_name
+                        })
+                    except ValueError as e:
+                        if "already exists" not in str(e):
+                            raise
+
+            # Step 4: Remove items that are no longer in inventory
+            to_remove = [entry for entry in existing_entries if entry.item not in inventory]
+            for entry in to_remove:
+                session.delete(entry)
+
+            session.commit()
+
+    def add_new_turn(self, messages: List[Dict[str, Any]], turn: int = -1):
+        """
+        Adds a new message to the "messages" table. If turn is not provided, it will be inferred from the DB.
+        Messages must follow standard OpenAI-type:
+            [{'role': 'r1', 'message': msg1}, {'role': 'r2', 'message': msg2}]
+        Here:
+            - 'role' either 'ai_response', 'human_response', or <actual NPC name>
+            - 'message' -- 'role' utterance
+
+        :param messages:
+        :param turn:
+        :return:
+        """
+
+        # "turn" is a primary key for the messages table
+        if turn == -1:
+            # read the DB to find the latest turn number
+            last_row = self.get_last_n_rows("messages", 1)
+            if last_row != []:
+                turn = last_row[0]
+            else:
+                logger.info(f"No rows found in \"messages\" table. Setting \"turn\" to 0")
+                turn = 0
+
+        row = {'turn': turn}
+        for msg in messages:
+            if msg['role'] not in self.messages_shema:
+                logger.error(f"{msg['role']} is not within acceptable shema!")
+                raise ValueError(f"{msg['role']} is not within acceptable shema!")
+
+            row[msg['role']] = msg['message']
+        self.add_row("messages", row, True)
+
+
+    def update_turn(self, messages: List[Dict[str, Any]], turn: int = -1):
+        """
+        Updates the turn. If turn is not provided, it will be inferred from the DB.
+        Messages must follow standard OpenAI-type:
+            [{'role': 'r1', 'message': msg1}, {'role': 'r2', 'message': msg2}]
+        Here:
+            - 'role' either 'ai_response', 'human_response', or <actual NPC name>
+            - 'message' -- 'role' utterance
+
+        :param message:
+        :param turn:
+        :return:
+        """
+        # "turn" is a primary key for the messages table
+        if turn == -1:
+            # read the DB to find the latest turn number
+            last_row = self.get_last_n_rows("messages", 1)
+            if last_row != []:
+                turn = last_row[0]
+            else:
+                logger.info(f"No rows found in \"messages\" table. Setting \"turn\" to 0")
+                turn = 0
+        _table_name = 'messages'
+        _strict = True
+        row = {
+            'turn': turn
+        }
+
+        for msg in messages:
+            if msg['role'] not in self.messages_shema:
+                logger.error(f"{msg['role']} is not within acceptable shema!")
+                raise ValueError(f"{msg['role']} is not within acceptable shema!")
+
+            row[msg['role']] = msg['message']
+
+        self.update_row(_table_name, row, _strict)
