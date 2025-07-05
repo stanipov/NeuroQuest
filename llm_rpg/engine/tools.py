@@ -31,7 +31,7 @@ class ObjectDescriptor:
 
     def __gen_rollback(self, obj: str) -> Dict[str, str]:
         rollback = {}
-        rollback['name'] = obj
+        rollback['name'] = obj.title()
         for fld in self.obj_expected_flds:
             rollback[fld] = ''
         return rollback
@@ -50,7 +50,7 @@ class ObjectDescriptor:
         except Exception as e:
             logger.warning(f"Could not parse response for \"{obj}\" with \"{e}\" error! Using the rollback!")
             response_dict = self.__gen_rollback(obj)
-
+        response_dict['name'] = response_dict['name'].title()
         return response_dict
 
 
