@@ -322,6 +322,29 @@ class SQLMemory:
 from llm_rpg.prompts.lore_generation import OBJECT_DESC
 class GameMemorySimple(SQLMemory):
     def __init__(self, db_path, npc_names: List[str] = []):
+        """
+        Inits/loads all relevant tables
+        Inventory:
+            character: str: Player/NPC name
+            item: str: item name, e.g. "axe", etc.
+            count: int: count of the items
+            -- primary keys: character, item
+        Items:
+            item: str: name of the item
+            description: str: item description
+            type: str: type of item, e.g. weapon/armor/...
+            action: str: how the item works
+            strength: str: effect of the item
+            -- primary key: item
+        History:
+            turn: int -- game turn, always starts from AI response
+            ai_response: str -- game response on joint actions of a human and npcs, i.e. it follows all these
+            human_response: str -- human response;  it is assumed that the response is valid, i.e. you must validate it before
+            <npc_1 name> -- utterance/actions of the NPC_1, will be always name of the NPC character
+            ...
+            <npc_N name> --utterance/actions of the NPC_N, will be always name of the NPC character
+        :return: None
+        """
         super().__init__(db_path)
 
         self.inventory_schema = {
@@ -331,7 +354,6 @@ class GameMemorySimple(SQLMemory):
         }
         self.inventory_pk = ["character", "item"]
         self.inventory_tbl_name = "inventory"
-
 
         self.items_schema = {
             "name": str, # <-- 'name' field from ObjectDescriptor.describe()
@@ -350,53 +372,28 @@ class GameMemorySimple(SQLMemory):
         self.history_pk = ['turn']
         self.history_tbl_name = 'history'
 
+        if self.inventory_tbl_name not in self.models:
+            logger.info(f"Creating the \"{self.inventory_tbl_name}\" table")
+            self.create_table(table_name=self.inventory_tbl_name,
+                              columns=self.inventory_schema,
+                              primary_keys=self.inventory_pk,
+                              index_keys=[],
+                              foreign_keys=None)
 
-    def create_inventory(self):
-        """
-        Build inventory and items tables.
-        Inventory:
-            character: str: Player/NPC name
-            item: str: item name, e.g. "axe", etc.
-            count: int: count of the items
-            -- primary keys: character, item
-        Items:
-            item: str: name of the item
-            description: str: item description
-            type: str: type of item, e.g. weapon/armor/...
-            action: str: how the item works
-            strength: str: effect of the item
-            -- primary key: item
-        :return: None
-        """
-        # First create items table (because inventory depends on it)
-        logger.info(f"Creating the \"{self.items_tbl_name}\" table")
-        self.create_table(table_name=self.items_tbl_name,
-                          columns=self.items_schema,
-                          primary_keys=self.items_pk,
-                          index_keys=[],
-                          foreign_keys=None)
+        if self.items_tbl_name not in self.models:
+            logger.info(f"Creating the \"{self.items_tbl_name}\" table")
+            self.create_table(table_name=self.items_tbl_name,
+                              columns=self.items_schema,
+                              primary_keys=self.items_pk,
+                              index_keys=[],
+                              foreign_keys=None)
 
-        # Now create inventory table
-        logger.info(f"Creating the \"{self.inventory_tbl_name}\" table")
-        self.create_table(table_name=self.inventory_tbl_name,
-                          columns=self.inventory_schema,
-                          primary_keys=self.inventory_pk,
-                          index_keys=[],
-                          foreign_keys=None)
-
-
-    def create_history(self):
-        """
-        Creates "history" table which will store all message/actions in the game
-        
-        :param npc_names: 
-        :return: 
-        """
-        logger.info(f'Creating \"{self.history_tbl_name}\" table')
-        self.create_table(table_name=self.history_tbl_name,
-                          columns=self.history_schema,
-                          primary_keys=["turn"],
-                          index_keys=["turn"])
+        if self.history_tbl_name not in self.models:
+            logger.info(f"Creating the \"{self.history_tbl_name}\" table")
+            self.create_table(table_name=self.history_tbl_name,
+                              columns=self.history_schema,
+                              primary_keys=self.history_pk,
+                              index_keys=self.history_pk)
 
 
     def add_inventory_items(self, character: str,
@@ -432,7 +429,7 @@ class GameMemorySimple(SQLMemory):
                 if x != 'name':
                     row[x] = items_lut[item][x]
             try:
-                self.add_row("items", row, strict=True)
+                self.add_row(self.items_tbl_name, row, strict=True)
             except Exception as e:
                 if not "UNIQUE constraint failed" in str(e):
                     raise e
@@ -458,9 +455,9 @@ class GameMemorySimple(SQLMemory):
             rows2del_items.append({"name": item})
 
         # 1. inventory table
-        self.remove_rows("inventory", rows2del_inventory)
+        self.remove_rows(self.inventory_tbl_name, rows2del_inventory)
         # 2. items table
-        self.remove_rows("items", rows2del_items)
+        self.remove_rows(self.items_tbl_name, rows2del_items)
 
     def get_inventory_items(self, character: str) -> List[Dict[str, Any]]:
         result = []
