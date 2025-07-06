@@ -16,12 +16,13 @@ from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
-from llm_rpg.prompts.lore_generation import (world_desc_grim,
+from llm_rpg.prompts.lore_generation import (world_desc_default,
                                              kingdoms_traits,
                                              KINGDOM_DESC_STRUCT,
                                              TOWNS_DESC_STRUCT,
                                              CHAR_DESC_STRUCT,
                                              ANTAGONIST_DESC,
+                                             gen_world_rules_msgs,
                                              gen_world_msgs,
                                              gen_kingdom_msgs,
                                              gen_towns_msgs,
@@ -56,7 +57,7 @@ class LoreGeneratorGvt:
         :param client: the LLM client
         :param kwargs: any arguments needed in the future
         """
-        global world_desc_grim
+        global world_desc_default
         self.client = client
         self.lore = {}
         self.game_gen_params = {}
@@ -75,8 +76,14 @@ class LoreGeneratorGvt:
         self.ObjDesc = ObjectDescriptor(client)
 
         # defaults
-        self.WORLD_DESC = world_desc_grim
+        self.WORLD_DESC = world_desc_default
 
+
+    def generate_world_outline(self, num_rules: int, kind: str, **client_kwargs):
+        self.world_generator.gen_world_outline(num_rules, kind)
+        self.WORLD_DESC = self.world_generator.game_lore['world_outline']
+        self.lore['world_outline'] = self.world_generator.game_lore['world_outline']
+        self.game_gen_params.update(self.world_generator.game_gen_params)
 
     def generate_world(self, world_desc: str='',
                        **client_kwargs):
@@ -322,9 +329,28 @@ class GenerateWorld:
             self.api_delay = 0
 
 
+    def gen_world_outline(self, num_rules: int, kind: str= 'dark',  **client_kw):
+        """
+        Generates the world rules/outline
+        :param num_rules: int -- number of rules to generate
+        :param kind: str -- type of the world, allowed: dark, neutral, funny
+        :return:
+        """
+        msgs = gen_world_rules_msgs(num_rules, kind)
+        raw_world_desc_response = self.client.chat(msgs, **client_kw)
+        logger.info(f"Created world outline")
+        logger.debug(f"Prompt tokens: {raw_world_desc_response['stats']['prompt_tokens']}")
+        logger.debug(f"Eval tokens: {raw_world_desc_response['stats']['eval_tokens']}")
+        self.game_lore['world_outline'] = raw_world_desc_response['message']
+        self.game_gen_params['world_outline'] = {
+            "model": self.client.model_name,
+            "messages": msgs
+        }
+
+
     def gen_world(self, world_desc: str, **client_kw):
         """
-        Generates the world description. Provide world description
+        Generates the brief world description. Provide detailed world description
 
         :param world_desc:
         :param client_kw:
@@ -337,9 +363,10 @@ class GenerateWorld:
         logger.debug(f"Prompt tokens: {raw_world_response['stats']['prompt_tokens']}")
         logger.debug(f"Eval tokens: {raw_world_response['stats']['eval_tokens']}")
         self.game_lore['world'] = world_ai
-        self.game_gen_params['model'] = self.client.model_name
-        self.game_gen_params['world'] = msg_world_gen
-
+        self.game_gen_params['world'] = {
+            "model": self.client.model_name,
+            "messages": msg_world_gen
+        }
 
     def gen_kingdoms(self, num_kingdoms:int, kingdom_types:str|None=None, **client_kw):
         """
@@ -359,7 +386,10 @@ class GenerateWorld:
         logger.debug(f"Prompt tokens: {kingdoms_raw_response['stats']['prompt_tokens']}")
         logger.debug(f"Eval tokens: {kingdoms_raw_response['stats']['eval_tokens']}")
         self.game_lore['kingdoms'] = kingdoms_ai
-        self.game_gen_params['kingdoms'] = kingdoms_msg
+        self.game_gen_params['kingdoms'] = {
+            "model": self.client.model_name,
+            "messages": kingdoms_msg
+        }
 
 
     def gen_towns(self,
@@ -386,8 +416,10 @@ class GenerateWorld:
             logger.debug(f"Eval tokens: {towns_raw_response['stats']['eval_tokens']}")
             towns = parse_towns(towns_raw_response['message'], self.expected_flds_towns_def)
             self.game_lore['towns'][kingdom] = towns
-            self.game_gen_params['towns'][kingdom] = msg_towns_k
-
+            self.game_gen_params['towns'] = {
+                "model": self.client.model_name,
+                "messages": msg_towns_k
+            }
 
     def gen_end_game_conditions(self,
                                 player_desc:Dict[str, str],
@@ -415,6 +447,11 @@ class GenerateWorld:
                                                    num_conditions, kind)
                 raw_response = self.client.chat(cond_gen_msgs)
                 self.game_lore["end_game"][kind] = raw_response["message"]
+                self.game_gen_params["end_game"][kind] = {
+                    "model": self.client.model_name,
+                    "messages": cond_gen_msgs
+                }
+
             except Exception as e:
                 logger.error(f"Could not generate conditions to \"{kind}\" with \"{e}\" error")
                 raise ValueError(f"Could not generate conditions to \"{kind}\" with \"{e}\" error")
@@ -499,6 +536,7 @@ class GenerateCharacter:
         town_name = kwargs.get('town_name', '')
 
         names2avoid = list(self.characters.keys())
+        logger.info(f"Generating {num_chars} characters, avoiding these names: {names2avoid}")
         char_gen_msgs = gen_human_char_msgs(game_lore, kingdom_name, town_name,
                                             num_chars, char_description, names2avoid)
         self.char_gen_params['characters'] = char_gen_msgs

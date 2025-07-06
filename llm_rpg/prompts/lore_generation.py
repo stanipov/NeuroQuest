@@ -1,6 +1,7 @@
 """
 Collection of prompts to generate the world and the lore
 """
+
 from ..utils.helpers import dict_2_str
 import logging
 logger = logging.getLogger(__name__)
@@ -131,7 +132,7 @@ creatures living on the Discworld. Occasionally they intervene, but things never
 when the do it."""
 
 # Something grim, work in progress
-world_desc_grim = """- This is fantasy world where magic is strong.
+world_desc_default = """- This is fantasy world where magic is strong.
 - The world is inherently unfriendly place.
 - Climate is good in the South, but more northern regions are harsher.
 - The world has long winters and summers, which change relatively fast.
@@ -156,6 +157,23 @@ information. You follow following instructions:
 - You must stay below 5 sentences for each description."""
 
 
+# The prompt to generate rules fo a world similar to 'world_desc_default' above
+WORLD_RULES_GEN_SYS_PRT = """You are a fiction story writer. \
+Your task is to invent a fantasy world. Follow these instructions:
+- Only generate in plain text without formatting.
+- You describe fundamental world mechanics, such as magic, technology, etc.
+- You describe how these mechanics interact with each other.
+- You invent races and species which inhabitate the world.
+- You describe how these species and races interact with each other.
+- You respond only with a list of rules/outlines of 1 sentence long each.
+
+Example of your response:
+- The world is inherently unfriendly place.
+- Climate is good in the South, but more northern regions are harsher.
+- The world has long winters and summers, which change relatively fast.
+- Many creatures are indifferent to humans, but some are very unfriendly."""
+
+
 # A system prompt to describe objects based on instructions
 # Used in ObjectDescriptor class
 OBJ_ESTIMATOR_SYS_PROMPT = """You are an AI Game Assistant. \
@@ -174,6 +192,44 @@ Your response follows these generic rules:
 - you carefully follow instruction in your prompt
 - correct spelling errors"""
 ########################################################################################################################
+def gen_world_rules_msgs(num_rules: int, kind: str="dark") -> List[Dict[str, str]]:
+    """
+    Generates world description used to generate the shorter world description shown to the player.
+    :param num_rules: int -- number of the descriptors to generate
+    :param kind:
+    :return:
+    """
+    global WORLD_RULES_GEN_SYS_PRT
+
+    world_types = {
+        "dark": f"""Create world description for a dark fantasy world. \
+This world is grimdark, unfair, where ordinary people struggle and the few have everything.
+
+Your inspiration is:
+- Lord Of The Rings
+- Norse mythology
+- Slavic mythology
+
+Provide a list of total {num_rules} in a plain text.""",
+        "neutral": f"""Create a world description for a typical fantasy world, similar to Dungeons and Dragons.
+
+Your inspiration is:
+- Lord Of The Rings
+- Norse mythology
+- Slavic mythology
+
+Provide a list of total {num_rules} in a plain text.""",
+        "funny": f"""Create a humorous fantasy world in a style of Discworld of Terry Pratchett.
+Provide a list of total {num_rules} in a plain text. """
+    }
+
+    if kind not in world_types.keys():
+        raise ValueError(f"World type is {kind} is not recognized! Expected {list(world_types.keys())}")
+
+    return [{"role": "system", "content": WORLD_RULES_GEN_SYS_PRT},
+            {"role": "user", "content": world_types[kind]}]
+
+
 def gen_world_msgs(world_desc:str) -> List[Dict[str, str]]:
     """
     Returns a prompt to generate world description.
@@ -184,8 +240,12 @@ def gen_world_msgs(world_desc:str) -> List[Dict[str, str]]:
 
     global LORE_GEN_SYS_PRT
     world_prompt = f"""Generate a creative description of a unique fantasy world. Be poetic. \
-These are world properties:
+Use these world properties:
 {world_desc}
+
+Follow these instructions:
+- <WORLD NAME>: invent a captivating fantasy name for the world, 1 word
+- <WORLD DESCRIPTION>: provide up to 5 sentences.
 
 Output content in the form:
 World Name: <WORLD NAME>
