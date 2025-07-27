@@ -350,13 +350,13 @@ class GameMemorySimple(SQLMemory):
         self.inventory_schema = {
             "character": str,
             "item": str,
-            "count": int
+            "count": float
         }
         self.inventory_pk = ["character", "item"]
         self.inventory_tbl_name = "inventory"
 
         self.items_schema = {
-            "name": str, # <-- 'name' field from ObjectDescriptor.describe()
+            "name": str,
         }
         for x in OBJECT_DESC.keys():
             self.items_schema[x] = str
@@ -459,6 +459,7 @@ class GameMemorySimple(SQLMemory):
         # 2. items table
         self.remove_rows(self.items_tbl_name, rows2del_items)
 
+
     def get_inventory_items(self, character: str) -> List[Dict[str, Any]]:
         result = []
         inventory = self.models[self.inventory_tbl_name].__table__
@@ -476,6 +477,7 @@ class GameMemorySimple(SQLMemory):
                 result.append(dict(row._mapping))
 
         return result
+
 
     def get_most_recent_turn(self) -> Tuple[int, bool]:
         """
@@ -505,7 +507,6 @@ class GameMemorySimple(SQLMemory):
         :param turn:
         :return:
         """
-
         # "turn" is a primary key for the messages table
         if turn == -1:
             turn, last_row_not_empty = self.get_most_recent_turn()
