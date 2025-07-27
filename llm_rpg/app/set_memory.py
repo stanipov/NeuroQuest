@@ -10,12 +10,14 @@ from llm_rpg.engine.memory import GameMemorySimple
 from typing import Dict, List, Any
 import os
 import logging
+from copy import  deepcopy as dCP
 
 logger = logging.getLogger(__name__)
 
 
-def populate_db(lore: Dict[str, Any], db_path: str):
+def populate_db(game_lore: Dict[str, Any], db_path: str):
 
+    lore = dCP(game_lore)
     if os.path.exists(db_path):
         raise Exception(f"DB already exists: \"{db_path}\"!")
 
@@ -32,7 +34,16 @@ def populate_db(lore: Dict[str, Any], db_path: str):
     for item in inventory_list:
         items_desc[item] = inventory_lut[item]
         inventory_list_counts[item] = 1
-    inventory_list_counts['money'] = lore['human_player'].pop('money')
+    inventory_list_counts['gold'] = lore['human_player'].pop('money')
+    items_desc['gold'] = {}
+    for key in inventory_lut[item].keys():
+        if key == "name":
+            items_desc['gold'][key] = 'gold'
+            continue
+        if key == "type":
+            items_desc['gold'][key] = 'money'
+            continue
+        items_desc['gold'][key] = ''
     memory.add_inventory_items('human', inventory_list_counts, items_desc)
 
     # npcs:
@@ -45,7 +56,16 @@ def populate_db(lore: Dict[str, Any], db_path: str):
         for item in inventory_list:
             items_desc[item] = inventory_lut[item]
             inventory_list_counts[item] = 1
-        inventory_list_counts['money'] = lore['npc'][character].pop('money')
+        inventory_list_counts['gold'] = lore['npc'][character].pop('money')
+        items_desc['gold'] = {}
+        for key in inventory_lut[item].keys():
+            if key == "name":
+                items_desc['gold'][key] = 'gold'
+                continue
+            if key == "type":
+                items_desc['gold'][key] = 'money'
+                continue
+            items_desc['gold'][key] = ''
         memory.add_inventory_items(character, inventory_list_counts, items_desc)
 
     # starting the history
@@ -62,7 +82,8 @@ def populate_db(lore: Dict[str, Any], db_path: str):
     return lore, memory
 
 
-def load_data(lore: Dict[str, Any], db_path: str):
+def load_data(game_lore: Dict[str, Any], db_path: str):
+    lore = dCP(game_lore)
     if not os.path.exists(db_path):
         raise Exception(f"DB does not exist: \"{db_path}\"!")
 
