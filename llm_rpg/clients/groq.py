@@ -35,6 +35,10 @@ class GroqW(BaseClient):
     def set_model(self, model_name):
         self.model_name = model_name
         self.client = Groq(api_key=self.__api_key)
+        if F_IS_SRUCT:
+            self.struct_client = instructor.from_groq(self.client)
+        else:
+            self.struct_client = None
         return self.client
 
     def chat(self, messages: List[Dict[Any, Any]], *args, **kwargs) -> Dict[str, Any]:
@@ -79,7 +83,7 @@ class GroqW(BaseClient):
 
     def struct_output(self, messages: List[Dict[Any, Any]],
                         pydantic_model: pydantic.BaseModel,
-                        *args, **kwargs) -> Dict[str, Any]:
+                        **kwargs) -> Dict[str, Any]:
         if 'temperature' in kwargs:
             temp = kwargs.pop('temperature')
         else:
