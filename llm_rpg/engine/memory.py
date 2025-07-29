@@ -5,6 +5,7 @@ Classes/methods to work with memory
 from itertools import cycle
 from typing import List, Dict, Any, Type, Tuple
 
+from sqlalchemy import or_, and_
 from sqlalchemy import create_engine, Column, String, Text, MetaData, ForeignKey, Float, Integer, Table
 from sqlalchemy.orm import sessionmaker, DeclarativeBase, relationship
 from sqlalchemy.inspection import inspect
@@ -315,6 +316,69 @@ class SQLMemory:
 
         model = self.models[table_name]
         return [key.name for key in inspect(model).primary_key]
+
+
+    def query_rows_by_keys(self,
+                           table_name: str,
+                           keys_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Queries a table over columns and their values. Expected input
+        [
+            {"key_1": val_1_1,...,"key_N": val_N_1},
+            ...
+            {"key_1": val_1_K,...,"key_N": val_N_K}
+        ]
+        Where N -- number of values, K - number of different queries. This is equivalent to
+            SELECT
+                key_1,
+                ...,
+                key_N
+            FROM
+                table
+            WHERE
+                (key_1 = val_1_1
+                AND
+                ...
+                key_N = val_N_1)
+                OR
+                ...
+                OR
+                (key_1 = val_1_K
+                AND
+                ...
+                key_N = val_N_K)
+        Example usage:
+        [
+            {"turn": 10},
+            {"turn": 11},
+        ]
+
+        :param table_name: str -- table name
+        :param keys_list: List[Dict[str, Any]] -- columns and their values to query
+        :return:
+        """
+        if table_name not in self.models:
+            logger.warning(f"\"{table_name}\" is not found!")
+            return []
+
+        model = self.models[table_name]
+        results = []
+
+        with self.Session() as session:
+            try:
+                # OR of all AND conditions
+                all_filters = [
+                    and_(*[getattr(model, k) == v for k, v in key_dict.items()])
+                    for key_dict in keys_list]
+                query = session.query(model).filter(or_(*all_filters))
+                matched_rows = query.all()
+                results = [{col.name: getattr(row, col.name) for col in model.__table__.columns}
+                           for row in matched_rows]
+            except Exception as e:
+                logger.error(f"Error querying table \"{table_name}\": {e}")
+                raise e
+
+        return results
 
 # ----------------------------- Memory for the game -----------------------------
 
