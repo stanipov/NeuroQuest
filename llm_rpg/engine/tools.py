@@ -17,8 +17,7 @@ from typing import Dict, List, Any
 from llm_rpg.templates.base_client import BaseClient
 from llm_rpg.prompts.gameplay import (STORY_TELLER_SYS_PRT,
                                       INVENTORY_CHANGE_SYS_PROMPT,
-                                      gen_story_telling_msg,
-                                      gen_validation_msgs)
+                                      gen_story_telling_msg)
 from llm_rpg.prompts.response_models import Inventory, ValidAction
 from llm_rpg.prompts.lore_generation import (gen_obj_est_msgs, OBJECT_DESC)
 from llm_rpg.utils.helpers import parse2structure
@@ -80,8 +79,7 @@ class InputValidator:
         self.sys_prompt_world_base= f"""You are AI game engine that verifies player's actions.
 Here are rules for the world you are playing in:
 {lore['world_outline']}
-And the world description:
-{lore['world']}
+
 Known kingdoms and towns:
 {self.lore_kingdoms_towns}"""
         self.sys_prompt_task_base = """Your task:
@@ -94,8 +92,12 @@ Known kingdoms and towns:
 
         self.response_model = response_model
         self.llm = llm_client
+        # stats for a recent call
+        self.stats = {}
+        # the last submitted messages
+        self.last_submitted_messages = {}
 
-    def __compile_messages(self,
+    def compile_messages(self,
                            action: str,
                            context: str,
                            inventory: List[str] = None,
@@ -109,16 +111,19 @@ Known kingdoms and towns:
         sys_prt = copy.copy(self.sys_prompt_world_base)
 
         if other_known_locations is not None:
-            sys_prt += f"\nOther known locations to consider:\n{other_known_locations}"
-        sys_prt += f"\n{self.sys_prompt_task_base}"
-        sys_prt += f"\n{self.sys_prompt_instructions_base}"
+            logger.debug("Other known location added")
+            sys_prt += f"\nOther known locations to consider: {other_known_locations}"
+        sys_prt += f"\n\n{self.sys_prompt_task_base}"
+        sys_prt += f"\n\n{self.sys_prompt_instructions_base}"
         if phys_ment_state is not None:
+            logger.debug("Phys/mental instructions state added")
             sys_prt += f"\n- player can't act in contradiction to their physical or mental state. E.g., a player can't lift heavy items while lacking a limb"
 
-        if enforce_json_output :
-            sys_prt += f"\nStructure your output following this Pydantic schema:\n{self.response_model.model_json_schema()}"
+        if enforce_json_output:
+            logger.debug("Enforcing pydantic schema in the system prompt")
+            sys_prt += f"\n\nStructure your output following this Pydantic schema:\n{self.response_model.model_json_schema()}"
         else:
-            sys_prt += "\nYour response is a valid JSON."
+            sys_prt += "\n\nYour response is a valid JSON."
 
         # build the task message
         logger.debug("Building task prompt")
@@ -128,16 +133,21 @@ Known kingdoms and towns:
 {context}"""
 
         if inventory is not None or phys_ment_state is not None or current_location is not None:
+            logger.debug("Adding additional information to the task")
             val_task += "\n# ---------- Use this additional information about the player ----------"
         if inventory is not None:
-            val_task += f"\nPlayer's inventory: {inventory}\n"
+            logger.debug("Added inventory")
+            val_task += f"\nPlayer's inventory: {inventory}"
         if current_location is not None:
-            val_task += f"\nPlayer's current location: {current_location}\n"
+            logger.debug("Added current location")
+            val_task += f"\nPlayer's current location: {current_location}"
         if phys_ment_state is not None:
             s = ""
             if "physical" in phys_ment_state:
+                logger.debug("Added physical state")
                 s += f"\nPlayer's physical state: {phys_ment_state['physical']}"
             if 'mental' in phys_ment_state:
+                logger.debug("Added mental state")
                 s += f"\nPlayer's mental state: {phys_ment_state['mental']}"
             val_task += s
 
@@ -165,8 +175,14 @@ Known kingdoms and towns:
         :param llm_kwargs: Any -- LLM kwargs
         :return: pydantic.BaseModel -- Pydantic response model
         """
-        __msgs = self.__compile_messages(action, context, inventory, current_location, other_known_locations, phys_ment_state)
+        logger.debug("Validating player action")
+        __msgs = self.compile_messages(action, context, inventory, current_location, other_known_locations, phys_ment_state)
+        self.last_submitted_messages = __msgs
         raw_response = self.llm.struct_output(__msgs, self.response_model, **llm_kwargs)
+        try:
+            self.stats = raw_response['stats']
+        except Exception as e:
+            logger.debug(f"Could not get call stats with \"{e}\"")
         return raw_response['message']
 
 
