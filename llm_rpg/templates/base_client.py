@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Union
+from pydantic import BaseModel
 
 
 class BaseClient(ABC):
@@ -34,6 +35,24 @@ class BaseClient(ABC):
         :return: Dict[str, Any] ->
             response = {
                 "message": LLM response,
+                "stats": {
+                    'prompt_tokens': count of prompt tokens
+                    'prompt_eval_duration': prompt evaluation duration in ms,
+                    'eval_tokens': count of response tokens,
+                    'eval_duration': generation duration in ms
+                }
+            }
+        """
+
+    @abstractmethod
+    def struct_output(self, messages: List[Dict[Any, Any]], response_model:BaseModel) -> Any:
+        """
+        Sends messages to an LLM instance for processing and return Pydantic structured output
+        :param messages: A list of message dictionaries, each containing a 'content' key.
+        :param response_model: Pydantic.BaseModel
+        :return: Dict[str, Any] ->
+            response = {
+                "message": Pydantic.BaseModel,
                 "stats": {
                     'prompt_tokens': count of prompt tokens
                     'prompt_eval_duration': prompt evaluation duration in ms,
