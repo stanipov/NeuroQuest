@@ -45,7 +45,7 @@ class BaseClient(ABC):
         """
 
     @abstractmethod
-    def struct_output(self, messages: List[Dict[Any, Any]], response_model:BaseModel) -> Any:
+    def struct_output(self, messages: List[Dict[Any, Any]], response_model:BaseModel, **kwargs) -> Any:
         """
         Sends messages to an LLM instance for processing and return Pydantic structured output
         :param messages: A list of message dictionaries, each containing a 'content' key.
