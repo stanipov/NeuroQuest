@@ -19,7 +19,6 @@ logger = logging.getLogger(__name__)
 
 class IO:
     """
-
     Error codes:
         0 : success
         1: id not found (when setting/searching for an id)
@@ -42,6 +41,7 @@ class IO:
         if os.path.exists(os.path.join(self.workdir, "games.json")):
             logger.info(f"Found saved games, reading")
             self.games = pd.read_json(os.path.join(self.workdir, "games.json"))
+            self.games['datetime_utc'] = pd.to_datetime(self.games['datetime_utc'], unit='ms', utc=True)
             logger.info(f"Done. Setting current game to the latest")
             _t = self.games.sort_values(by='datetime_utc', ascending=False)
             self.id = _t.iloc[0]['id']
@@ -119,19 +119,3 @@ class IO:
         else:
             logger.warning(f"\"{id}\" is not found within valid game ids. Skipping")
             return 1 # invalid game id
-
-
-    def save_object(self, obj, name) -> int:
-        """
-        TODO
-        :param obj:
-        :param name:
-        :return:
-        """
-        if type(obj) == dict:
-            _fname = os.path.join(self.dst, f"{name}.json")
-            pass
-        if type(obj) == pd.DataFrame:
-            pass
-
-        pass
