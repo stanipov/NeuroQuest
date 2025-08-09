@@ -329,14 +329,16 @@ class GenerateWorld:
             self.api_delay = 0
 
 
-    def gen_world_outline(self, num_rules: int, kind: str= 'dark',  **client_kw):
+    def gen_world_outline(self, num_rules: int,
+                          world_type:str='fantasy',
+                          kind: str= 'dark',  **client_kw):
         """
         Generates the world rules/outline
         :param num_rules: int -- number of rules to generate
         :param kind: str -- type of the world, allowed: dark, neutral, funny
         :return:
         """
-        msgs = gen_world_rules_msgs(num_rules, kind)
+        msgs = gen_world_rules_msgs(num_rules, world_type, kind)
         raw_world_desc_response = self.client.chat(msgs, **client_kw)
         logger.info(f"Created world outline")
         logger.debug(f"Prompt tokens: {raw_world_desc_response['stats']['prompt_tokens']}")

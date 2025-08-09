@@ -192,7 +192,9 @@ Your response follows these generic rules:
 - you carefully follow instruction in your prompt
 - correct spelling errors"""
 ########################################################################################################################
-def gen_world_rules_msgs(num_rules: int, kind: str="dark") -> List[Dict[str, str]]:
+def gen_world_rules_msgs(num_rules: int,
+                         world_type: str= "fantasy",
+                         kind: str="dark") -> List[Dict[str, str]]:
     """
     Generates world description used to generate the shorter world description shown to the player.
     :param num_rules: int -- number of the descriptors to generate
@@ -201,27 +203,54 @@ def gen_world_rules_msgs(num_rules: int, kind: str="dark") -> List[Dict[str, str
     """
     global WORLD_RULES_GEN_SYS_PRT
 
-    world_types = {
-        "dark": f"""Create world description for a dark fantasy world. \
-This world is grimdark, unfair, where ordinary people struggle and the few have everything.
+    if world_type.lower() == 'fantasy':
+        world_types = {
+            "dark": f"""Create world description for a dark fantasy world. \
+        This world is grimdark, unfair, where ordinary people struggle and the few have everything.
 
-Your inspiration is:
-- Lord Of The Rings
-- Norse mythology
-- Slavic mythology
+        Your inspiration is:
+        - Lord Of The Rings
+        - Norse mythology
+        - Slavic mythology
 
-Provide a list of total {num_rules} in a plain text.""",
-        "neutral": f"""Create a world description for a typical fantasy world, similar to Dungeons and Dragons.
+        Provide a list of total {num_rules} in a plain text.""",
+            "neutral": f"""Create a world description for a typical fantasy world, similar to Dungeons and Dragons.
 
-Your inspiration is:
-- Lord Of The Rings
-- Norse mythology
-- Slavic mythology
+        Your inspiration is:
+        - Lord Of The Rings
+        - Norse mythology
+        - Slavic mythology
 
-Provide a list of total {num_rules} in a plain text.""",
-        "funny": f"""Create a humorous fantasy world in a style of Discworld of Terry Pratchett.
-Provide a list of total {num_rules} in a plain text. """
-    }
+        Provide a list of total {num_rules} in a plain text.""",
+            "funny": f"""Create a humorous fantasy world in a style of Discworld of Terry Pratchett.
+        Provide a list of total {num_rules} in a plain text."""
+        }
+
+    if world_type.lower() == 'sci-fi':
+        world_types = {
+            "dark": f"""Create world description for a dark sci-fi world. \
+        This world is grimdark, unfair, where ordinary people struggle and the few have everything.
+
+        Your inspiration is:
+        - Lord Of The Rings
+        - Norse mythology
+        - Slavic mythology
+
+        Provide a list of total {num_rules} in a plain text.""",
+            "neutral": f"""Create a world description for a typical sci-fi world, similar to Star Wars or Mass Effect.
+
+        Your inspiration is:
+        - Lord Of The Rings
+        - Norse mythology
+        - Slavic mythology
+
+        Provide a list of total {num_rules} in a plain text.""",
+            "funny": f"""Create a humorous sci-fi world in a style of Futurama TV series.
+        Provide a list of total {num_rules} in a plain text."""
+        }
+
+    if world_type.lower() not in ['sci-fi', 'fantasy']:
+        raise ValueError(f"World type is {world_type} is not recognized! Expected {['sci-fi', 'fantasy']}")
 
     if kind not in world_types.keys():
         raise ValueError(f"World type is {kind} is not recognized! Expected {list(world_types.keys())}")
