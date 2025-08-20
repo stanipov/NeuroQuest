@@ -1,22 +1,22 @@
 from typing import Dict
+
 from rich.console import Console
-from rich.style import Style
-from rich.theme import Theme
 from rich.panel import Panel
-from rich.table import Text
+from rich.style import Style
+from rich.text import Text
 import os
 
-from llm_rpg.templates.console_manager import BaseConsoleManager
+from llm_rpg.gui.styles import ConsoleStyles
 
 
-class ConsoleManager(BaseConsoleManager):
-    """Handles console creation and styling with rich library"""
+class ConsoleManager():
+    """Handles console creation and management with rich library"""
 
     def __init__(self):
         """Initialize console manager with environment setup and console creation"""
         self.setup_terminal_environment()
+        self._styles = ConsoleStyles()  # Using the new styles class
         self._console = self.create_console()
-        self._styles = self.setup_styles()
 
     def setup_terminal_environment(self) -> None:
         """Ensure basic terminal environment variables"""
@@ -28,45 +28,9 @@ class ConsoleManager(BaseConsoleManager):
     def create_console(self) -> Console:
         """Create console with fallback options"""
         try:
-            return Console(theme=self.get_theme())
+            return Console(theme=self._styles.theme)
         except Exception:
-            return Console(theme=self.get_basic_theme(), force_terminal=True)
-
-    def get_theme(self) -> Theme:
-        """Main theme with colors"""
-        return Theme({
-            "title": "bold red",
-            "menu": "cyan",
-            "option": "green",
-            "error": "blink red",
-            "success": "green",
-            "info": "blue",
-            "prompt": "yellow"
-        })
-
-    def get_basic_theme(self) -> Theme:
-        """Fallback theme for limited terminals"""
-        return Theme({
-            "title": "bold",
-            "menu": "",
-            "option": "",
-            "error": "",
-            "success": "",
-            "info": "",
-            "prompt": ""
-        })
-
-    def setup_styles(self) -> Dict[str, Style]:
-        """Setup color styles for the game"""
-        return {
-            'title': Style(color="bright_red", bold=True),
-            'menu': Style(color="bright_cyan"),
-            'option': Style(color="bright_green"),
-            'error': Style(color="bright_red", blink=True),
-            'success': Style(color="bright_green"),
-            'info': Style(color="bright_blue"),
-            'prompt': Style(color="bright_yellow")
-        }
+            return Console(theme=self._styles.basic_theme, force_terminal=True)
 
     def clear_screen(self) -> None:
         """Clear the terminal screen"""
@@ -80,11 +44,15 @@ class ConsoleManager(BaseConsoleManager):
         """Display a styled header with the given title"""
         self.console.print(
             Panel.fit(
-                Text(title, justify="center", style=self.styles['title']),
-                border_style=self.styles['menu']
+                Text(title, justify="center", style=self._styles.get_style('title')),
+                border_style=self.get_style('menu')
             ),
             justify="center"
         )
+
+    def get_style(self, style_name: str) -> Style:
+        """Convenience method to get a style by name"""
+        return self._styles.get_style(style_name)
 
     @property
     def console(self) -> Console:

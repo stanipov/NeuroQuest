@@ -1,17 +1,12 @@
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from rich.style import Style
-from rich.theme import Theme
 
-import pandas as pd
 import time
-import os
 
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional
 from llm_rpg.templates.game_menu import Menu
-from llm_rpg.app.console_manager import ConsoleManager
+from llm_rpg.gui.console_manager import ConsoleManager
 
 # -------------------------- Set of global parameters --------------------------
 G_INV_INPUT_SLEEP_S = 1
@@ -44,7 +39,7 @@ class MainMenu(Menu):
                 Panel.fit(
                     menu,
                     title="Main Menu",
-                    border_style=self.styles['menu']
+                    border_style=self.console_manager.get_style('menu')
                 ),
                 justify="center"
             )
@@ -67,7 +62,7 @@ class MainMenu(Menu):
                 return self.return_data
             elif choice == 3:
                 self.console.print(
-                    Text("Farewell, adventurer!", style=self.styles['info']),
+                    Text("Farewell, adventurer!", style=self.console_manager.get_style('info')),
                     justify="center"
                 )
                 exit()
@@ -102,7 +97,7 @@ class NewGameMenu(Menu):
                 Panel.fit(
                     menu,
                     title="Configuration Options",
-                    border_style=self.styles['menu']
+                    border_style=self.console_manager.get_style('menu')
                 ),
                 justify="center"
             )
@@ -158,7 +153,7 @@ class NewGameMenu(Menu):
                 Panel.fit(
                     menu,
                     title="Available Options",
-                    border_style=self.styles['menu']
+                    border_style=self.console_manager.get_style('menu')
                 ),
                 justify="center"
             )
@@ -175,7 +170,7 @@ class NewGameMenu(Menu):
             self.display_header(f"🔢 Configure {name} 🔢")
 
             self.console.print(
-                Text(f"Current value: {current}", style=self.styles['info']),
+                Text(f"Current value: {current}", style=self.console_manager.get_style('info')),
                 justify="center"
             )
 
@@ -204,16 +199,16 @@ class LoadGameMenu(Menu):
 
             if games.empty:
                 self.console.print(
-                    Text("No saved games found!", style=self.styles['error']),
+                    Text("No saved games found!", style=self.console_manager.get_style('error')),
                     justify="center"
                 )
                 time.sleep(2)
                 return None
 
-            table = Table(title="Saved Games", border_style=self.styles['menu'])
-            table.add_column("#", style=self.styles['info'])
-            table.add_column("Description", style=self.styles['option'])
-            table.add_column("Date", style=self.styles['info'])
+            table = Table(title="Saved Games", border_style=self.console_manager.get_style('menu'))
+            table.add_column("#", style=self.console_manager.get_style('info'))
+            table.add_column("Description", style=self.console_manager.get_style('option'))
+            table.add_column("Date", style=self.console_manager.get_style('info'))
 
             for idx, row in games[["description", "datetime_utc"]].iterrows():
                 date_str = row["datetime_utc"].strftime("%Y-%m-%d %H:%M")
