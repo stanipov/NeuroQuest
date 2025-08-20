@@ -18,7 +18,7 @@ from llm_rpg.templates.base_client import BaseClient
 from llm_rpg.prompts.gameplay import (STORY_TELLER_SYS_PRT,
                                       INVENTORY_CHANGE_SYS_PROMPT,
                                       gen_story_telling_msg)
-from llm_rpg.prompts.response_models import Inventory, ValidAction
+from llm_rpg.prompts.response_models import Inventory, ValidAction, InventoryItemDescription
 from llm_rpg.prompts.lore_generation import (gen_obj_est_msgs, OBJECT_DESC)
 from llm_rpg.utils.helpers import parse2structure
 
@@ -29,35 +29,18 @@ class ObjectDescriptor:
     Generates descriptions and actions for a list of items (e.g. axe, spell, etc)
     """
     def __init__(self, client: BaseClient) -> None:
-        global OBJECT_DESC
         self.client = client
-        self.obj_expected_flds = list(OBJECT_DESC.keys())
         self.stats = {}
-
-
-    def __gen_rollback(self, obj: str) -> Dict[str, str]:
-        rollback = {}
-        rollback['name'] = obj.title()
-        for fld in self.obj_expected_flds:
-            rollback[fld] = ''
-        return rollback
+        self.response_model = InventoryItemDescription
 
 
     def describe(self, obj: str, **kwargs) -> Dict[str, str]:
         msgs = gen_obj_est_msgs(obj)
-        response = self.client.chat(msgs, **kwargs)
+        response = self.client.struct_output(msgs, self.response_model, **kwargs)
         self.stats[obj] = response['stats']
-
-        # parse the response
-        response_dict = {}
-        try:
-            ans = parse2structure(response['message'], self.obj_expected_flds)
-            response_dict = ans[list(ans.keys())[0]]
-            response_dict['name'] = response_dict['name'].title()
-        except Exception as e:
-            logger.warning(f"Could not parse response for \"{obj}\" with \"{e}\" error! Using the rollback!")
-            response_dict = self.__gen_rollback(obj)
-        return response_dict
+        result = response['message'].model_dump()
+        result['name'] = result['name'].title()
+        return result
 
 
 # ----------------------------------------------- PLAYER INPUT VALIDATOR -----------------------------------------------
@@ -113,6 +96,7 @@ Known kingdoms and towns:
         if other_known_locations is not None:
             logger.debug("Other known location added")
             sys_prt += f"\nOther known locations to consider: {other_known_locations}"
+
         sys_prt += f"\n\n{self.sys_prompt_task_base}"
         sys_prt += f"\n\n{self.sys_prompt_instructions_base}"
         if phys_ment_state is not None:

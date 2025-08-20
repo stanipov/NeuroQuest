@@ -12,6 +12,14 @@ class ValidAction(BaseModel):
     valid_reason: str = Field(description="Explain your decision on validity of player's action. Your response is a \
 list all identified violations (1-3 words for each) if valid == False, empty string if valid == True")
 
+# ------------------------------- Describe inventory -------------------------------
+class InventoryItemDescription(BaseModel):
+    name: str = Field(description="Object's name")
+    type: str = Field(description="Type of the object")
+    description: str = Field(description="Object description", default="")
+    action: str = Field(description="How this object works", default="")
+    strength: str = Field(description="Strength of the object", default="")
+
 
 # ------------------------------- Inventory item base model -------------------------------
 class InventoryItem(BaseModel):

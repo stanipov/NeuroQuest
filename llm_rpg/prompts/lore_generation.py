@@ -38,7 +38,7 @@ TOWNS_DESC_STRUCT = {
 STARTING_FUNDS = (20, 40)
 NUM_INV_ITEMS = 7
 CHAR_DESC_STRUCT = {
-    "gender": "character's gender, pick from: male",
+    "gender": "character's gender, pick from: male/female",
     "occupation": "pick one or two from warrior, researcher, magician, crook, theft, outcast",
     "age": "pick between 20 to 35",
     "biography": "a brief biography, 1-2 sentences",
@@ -52,15 +52,16 @@ CHAR_DESC_STRUCT = {
     "weaknesses": "1 sentence up to 10 words",
     "money": f"a number, pick between [{STARTING_FUNDS[0]}, {STARTING_FUNDS[1]}]",
     "inventory": f"""describe items the character has, up to {NUM_INV_ITEMS} items, single string. \
-Follow these rules for forming inventory:
-- Inventory must be in a reasonable agreement with character's goals, occupation, and biography. 
-- If the player is a warrior, it shall include armor (always made of metal or alloy only!) and a weapon \
+Rules for inventory:
+- Name: 1-2 words and functional.
+- Logical for the character's goals, occupation, and biography.
+- For a warrior - provide armor (always made of metal or alloy only!) and a weapon \
 (always made of a metal or alloy only). 
-- These materials are forbidden for armor and weapons: bones, wood, leather, silver, gold, copper
-- These materials are forbidden for weapons: bones, wood, silver, gold, copper
-- These materials are forbidden for armor: bones, wood, leather for armor, silver, gold, copper
-- If a player is a magician, the inventory must include relevant magical items
+- For a magician - the inventory must include relevant magical items.
+- Forbidden materials for armor and weapons: bones, wood, leather, silver, gold, copper, bronze
+- Forbidden materials for weapons: bones, wood, silver, gold, copper, bronze
 - All inventory elements must fit the goal of the character
+- No garments and clothing
 - List all items comma separated; never use 'and' """
 }
 
@@ -176,21 +177,23 @@ Example of your response:
 
 # A system prompt to describe objects based on instructions
 # Used in ObjectDescriptor class
-OBJ_ESTIMATOR_SYS_PROMPT = """You are an AI Game Assistant. \
-Your job is to provide description, type of a game object. \
-You will also provide a brief explanation on how it acts/works
-and estimate its strength if applicable.
-
-Some of the requested parameters could be irrelevant for a given object. \
-You must identify if certain instructions are applicable, if not, \
-your response to these instructions will be empty strings.
+OBJ_ESTIMATOR_SYS_PROMPT = """You are an AI Game engine. \
+Your task is to describe these properties of a game object:
+- name
+- description
+- type
+- working principles if applicable
+- strength if applicable
 
 Your response follows these generic rules:
 - short and concise
 - only text
 - you never add anything from yourself
-- you carefully follow instruction in your prompt
-- correct spelling errors"""
+- you carefully follow instruction in your task
+- correct spelling errors
+- maximum 5 words for each response
+
+Return a valid JSON"""
 ########################################################################################################################
 def gen_world_rules_msgs(num_rules: int,
                          world_type: str= "fantasy",
@@ -514,19 +517,17 @@ def gen_obj_est_msgs(obj: str) -> List[Dict[str, str]]:
     """
     global OBJ_ESTIMATOR_SYS_PROMPT, OBJECT_DESC
 
-    task = f"""Describe the given object: {obj} following these instructions:\n"""
+    task = f"""Describe the given object: {obj} following these additional instructions:\n"""
 
-    task += f"""name: provide name of the object {obj}. If \"{obj}\" starts with article, remove it. \
-Remove also all non-relevant parts such as additional descriptions or material.
-Examples: 1) a huge wooden spear with beautiful and intricate carving --> name: large wooden spear; \
-2) a battle axe --> name: battle axe; 3) silver-plated plate armor --> name: plate armor; \
-4) steel sword --> sword"""
+    task += f"""name: provide name of the object {obj}. Remove articles. Shorten the name to 1-2 word: \
+1) long wooden spear->spear 2) battle axe->axe 3) steel greatsword->greatsword"""
 
     for key, inst in OBJECT_DESC.items():
         task += f"{key}: {inst}\n"
 
     return [{"role": "system", "content": OBJ_ESTIMATOR_SYS_PROMPT},
             {"role": "user", "content": task}]
+
 
 def gen_npc_behavior_rules(npc:Dict[str, str],
                            num_rules:int=5) -> List[Dict[str, str]]:
