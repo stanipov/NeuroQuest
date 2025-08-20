@@ -7,7 +7,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from rich.style import Style
-from llm_rpg.templates.console_manager import BaseConsoleManager
+
 
 # -------------------------- Constants --------------------------
 G_INV_INPUT_SLEEP_S = 1
@@ -15,7 +15,7 @@ G_INV_INPUT_SLEEP_S = 1
 # -------------------------- Abstract Base Classes --------------------------
 class Menu(ABC):
     """Abstract base class for all menu types"""
-    def __init__(self, console_manager: BaseConsoleManager):
+    def __init__(self, console_manager):
         self.console_manager = console_manager
 
     @property
@@ -45,7 +45,7 @@ class Menu(ABC):
         """Get validated numeric input from user"""
         while True:
             choice = self.console.input(
-                Text(prompt, style=self.styles['prompt'])
+                Text(prompt, style=self.console_manager.get_style('prompt'))
             ).strip().lower()
 
             if choice == 'back':
