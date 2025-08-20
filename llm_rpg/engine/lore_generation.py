@@ -57,13 +57,16 @@ class LoreGeneratorGvt:
         :param client: the LLM client
         :param kwargs: any arguments needed in the future
         """
-        global world_desc_default
         self.client = client
         self.lore = {}
         self.game_gen_params = {}
         # LUT for inventory items
         self.lore['inventory_lut'] = {}
 
+        # We can generate own world description or use default one
+        # If no world description/outline/rues were generated, then
+        # the default will be used
+        self.lore['world_outline'] = None
         # API calls delay in seconds
         # needed for rate limitations
         if "api_delay" in kwargs:
@@ -75,21 +78,33 @@ class LoreGeneratorGvt:
         self.char_gen = GenerateCharacter(self.client)
         self.ObjDesc = ObjectDescriptor(client)
 
-        # defaults
-        self.WORLD_DESC = world_desc_default
 
-
-    def generate_world_outline(self, num_rules: int, kind: str, **client_kwargs):
-        self.world_generator.gen_world_outline(num_rules, kind)
+    def _generate_world_outline(self, num_rules: int, kind: str, world_type: str, **client_kwargs):
+        """
+        Generates world rules/outline.
+        :param num_rules:
+        :param kind: dark, funny, normal
+        :param world_type: fantasy, sci-fi
+        :param client_kwargs:
+        :return:
+        """
+        self.world_generator.gen_world_outline(num_rules, world_type, kind)
         self.WORLD_DESC = self.world_generator.game_lore['world_outline']
         self.lore['world_outline'] = self.world_generator.game_lore['world_outline']
         self.game_gen_params.update(self.world_generator.game_gen_params)
 
-    def generate_world(self, world_desc: str='',
-                       **client_kwargs):
-        if input_not_ok(world_desc, str, ''):
-            world_desc = self.WORLD_DESC
-        self.world_generator.gen_world(world_desc, **client_kwargs)
+
+    def generate_world(self, num_rules: int, kind: str, world_type: str, **client_kwargs):
+        """
+        Generates world description and the world based on the AI generated rules description
+        :param num_rules: number of world rules
+        :param kind: dark, neutral, funny
+        :param world_type: fantasy, sci-fi
+        :param client_kwargs:
+        :return:
+        """
+        self._generate_world_outline(num_rules, kind, world_type, **client_kwargs)
+        self.world_generator.gen_world(self.lore['world_outline'], **client_kwargs)
         self.lore.update(self.world_generator.game_lore)
         self.game_gen_params.update(self.world_generator.game_gen_params)
 
@@ -334,6 +349,7 @@ class GenerateWorld:
                           kind: str= 'dark',  **client_kw):
         """
         Generates the world rules/outline
+        :param world_type: type of world, fantasy or sci-fi
         :param num_rules: int -- number of rules to generate
         :param kind: str -- type of the world, allowed: dark, neutral, funny
         :return:

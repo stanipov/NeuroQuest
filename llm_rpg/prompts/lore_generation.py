@@ -165,13 +165,13 @@ Your task is to invent a fantasy world. Follow these instructions:
 - You describe how these mechanics interact with each other.
 - You invent races and species which inhabitate the world.
 - You describe how these species and races interact with each other.
-- You respond only with a list of rules/outlines of 1 sentence long each.
+- You respond only with a list of rules/outlines of 3-5 words each.
 
 Example of your response:
-- The world is inherently unfriendly place.
-- Climate is good in the South, but more northern regions are harsher.
-- The world has long winters and summers, which change relatively fast.
-- Many creatures are indifferent to humans, but some are very unfriendly."""
+- Cold world, no sun, little hope
+- Gods sleep, dreams spawn horrors
+- Magic corrupts over time
+- Kingdoms war for power alone."""
 
 
 # A system prompt to describe objects based on instructions
@@ -544,7 +544,7 @@ These traits will be used by a game master to predict behavior of the NPC and it
 other characters. Your response will be used by another AI/LLM model to generate the character's \
 actions in the game or response to the human player.
 
-Respond with the numbered list only"""
+Respond with the numbered list only of 3-5 words each."""
 
     return [{'role': 'system', 'content': LORE_GEN_SYS_PRT},
             {'role': 'user', 'content': npc_behavior_task}]
