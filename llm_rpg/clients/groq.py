@@ -2,7 +2,7 @@ from typing import List, Dict, Any
 from groq import Groq
 import pydantic
 from openai import responses
-
+import json
 from ..templates.base_client import BaseClient
 from groq.types.chat import ChatCompletion
 import logging
@@ -97,11 +97,19 @@ class GroqW(BaseClient):
             "stats": None
         }
 
+        try:
+            system_message = [{
+                "role": "system",
+                "content": f"""You MUST output a JSON object that strictly follows this schema: {json.dumps(pydantic_model.model_json_schema())}"""
+            }]
+        except Exception as e:
+            system_message = []
+
         if self.struct_client is not None:
             response = None
             try:
                 response = self.struct_client.chat.completions.create(model=self.model_name,
-                                                             messages=messages,
+                                                             messages=system_message + messages,
                                                              response_model=pydantic_model,
                                                              temperature=temp, **kwargs)
             except Exception as e:

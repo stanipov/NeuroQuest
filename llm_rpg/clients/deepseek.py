@@ -1,3 +1,5 @@
+from markdown_it.common.utils import escapeHtml
+
 from llm_rpg.templates.base_client import BaseClient
 from typing import List, Dict, Any, Union, Optional, Type, Generator
 import pydantic
@@ -155,14 +157,15 @@ class DeepSeekW_requests(BaseClient):
         :return: Dictionary with structured message, stats, and reasoning
         """
         # Add instruction to format output as JSON matching the pydantic model
-        system_message = {
+        try:
+            system_message = [{
             "role": "system",
-            "content": f"""You MUST output a JSON object that strictly follows this schema:
-    {json.dumps(pydantic_model.model_json_schema(), indent=2)}"""
-        }
+            "content": f"""You MUST output a JSON object that strictly follows this schema: {json.dumps(pydantic_model.model_json_schema())}"""}]
+        except Exception as e:
+            system_message = []
 
         # Insert the system message at the beginning
-        messages_with_instruction = [system_message] + messages
+        messages_with_instruction = system_message + messages
 
         payload = {
             "model": self.model_name,
@@ -316,8 +319,7 @@ class DeepSeekW_OAI(BaseClient):
         # Add instruction to format output as JSON matching the pydantic model
         system_message = {
             "role": "system",
-            "content": f"""You MUST output a JSON object that strictly follows this schema:
-    {json.dumps(pydantic_model.model_json_schema(), indent=2)}"""
+            "content": f"""You MUST output a JSON object that strictly follows this schema: {json.dumps(pydantic_model.model_json_schema())}"""
         }
 
         # Insert the system message at the beginning

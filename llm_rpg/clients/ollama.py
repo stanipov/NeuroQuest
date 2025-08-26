@@ -5,6 +5,7 @@ import pydantic
 from ..templates.base_client import BaseClient
 import logging
 logger = logging.getLogger(__name__)
+import json
 
 def clean_json(x: str) -> str:
     x = x.replace('json', '')
@@ -114,9 +115,18 @@ class OllamaW(BaseClient):
         if "temperature" in kwargs:
             opts.update({"temperature": kwargs['temperature']})
 
+        try:
+            schema = pydantic_model.model_json_schema()
+            system_message = [{
+                "role": "system",
+                "content": f"Respond matching: {json.dumps(schema)}"
+            }]
+        except Exception as e:
+            system_message = []
+
         raw_response = self.client.chat(model=self.model_name,
                                         options=opts,
-                                        messages=messages,
+                                        messages=system_message + messages,
                                         format=pydantic_model.model_json_schema())
 
         msg = raw_response.message.content
