@@ -11,12 +11,10 @@ import pydantic
 from typing import Dict, List, Any
 
 from llm_rpg.templates.base_client import BaseClient
-from llm_rpg.prompts.gameplay import (STORY_TELLER_SYS_PRT,
-                                      INVENTORY_CHANGE_SYS_PROMPT,
-                                      gen_story_telling_msg)
-from llm_rpg.prompts.response_models import Inventory, InventoryItemDescription, _pick_actions
-from llm_rpg.prompts.lore_generation import (gen_obj_est_msgs, OBJECT_DESC)
-from llm_rpg.utils.helpers import parse2structure
+
+from llm_rpg.prompts.response_models import InventoryItemDescription, _pick_actions, InventoryUpdates
+from llm_rpg.prompts.lore_generation import (gen_obj_est_msgs)
+
 
 import logging
 logger = logging.getLogger(__name__)
@@ -107,7 +105,7 @@ Following is forbidden:
             TASK_VAL_INPUT_CLS += f"\nUse this additional context: {inventory}"
 
         return system_message + [
-            {'role': 'system', 'content': sys_prt},
+            {'role': 'system', 'content': system_message+sys_prt},
             {'role': 'user', 'content': TASK_VAL_INPUT_CLS}]
 
 
@@ -124,7 +122,7 @@ Following is forbidden:
         :param context: str -- any additional context, such as previous responses, etc.
         :param inventory: str -- Optional, list of inventory items
         :param additional_context: str -- any additional context
-        :param llm_kwargs: Any -- LLM kwargs
+        :param llm_kwargs: Dict[Any, Any] -- any LLM related kwargs
         :return: pydantic.BaseModel -- Pydantic response model
         """
         logger.debug("Validating player action")
@@ -142,64 +140,85 @@ Following is forbidden:
 # ------------------------------------------------- INVENTORY UPDATER --------------------------------------------------
 class InventoryChange:
     def __init__(self, llm_client):
-        global INVENTORY_CHANGE_SYS_PROMPT
-        self.system_prompt = INVENTORY_CHANGE_SYS_PROMPT
         self.client = llm_client
-        self.__money_synonyms = ['gold', 'money', 'silver', 'crown']
+        self.response_model = InventoryUpdates
+        self.sys_prt = """You are RPG Game Engine. Detect changes to a player's inventory.
+Your instructions:
+- If a player picks up, or gains an item add it to the inventory with a positive change_amount.
+- If a player loses an item remove it from their inventory with a negative change_amount.
+- Only take items that it's clear the player lost.
+- Only give items that it's clear the player gained. 
+- Ignore all items offered/gifted unless these were accepted.
+- Don't make any other item updates.
+Never add any thinking."""
 
-    def inventory_change_ai(self,
-                            human_msg: str,
-                            ai_response: str,
-                            **client_kw) -> Dict[str, Any]:
-
-        global Inventory
-
-        assessor_task = f"""Recent player action: \"{human_msg}\"
-Recent game response: \"{ai_response}\"
-Inventory Updates:"""
-
-        inv_msg = [{'role': 'system', 'content': INVENTORY_CHANGE_SYS_PROMPT},
-                   {'role': 'user', 'content': assessor_task}]
-
-        inv_ans = self.client.struct_output(inv_msg, Inventory, **client_kw)
-        return inv_ans['message'].model_dump()['itemUpdates']
+        # stats for a recent call
+        self.stats = {}
+        # the last submitted messages
+        self.last_submitted_messages = {}
 
 
-    def validate_ai_updates(self,
-                            updates: Dict[str, Any],
-                            inventory: List[str]) -> Dict[str, Any]:
+    def compile_messages(self,
+                         action: str,
+                         context: str,
+                         inventory: List[str] = None,
+                         additional_context:str = None,
+                         enforce_json_output:bool=False) -> List[Dict[str, str]]:
         """
-        Validates AI response. LLMs may identify 
-        :param updates:
-        :param inventory:
+        Build the messages/payload for the LLM
+        :param action: str -- human action
+        :param context: str -- context (e.g. previous actions/etc)
+        :param inventory: List[str] -- list of inventory items
+        :param additional_context: str -- any additional information to consider
+        :param enforce_json_output: bool -- adds system prompt with the JSON schema, default: False
         :return:
         """
-        items2pop = []
-        for idx, item in enumerate(updates):
-            if item['item'] not in inventory:
-                items2pop.append(idx)
+        TASK_PRT = f"""User actions: {action}"""
+        if context != '':
+            TASK_PRT += f"""Context: {context}"""
+        TASK_PRT += f"""User's inventory: {inventory}"""
+        if additional_context is not None and additional_context != '':
+            TASK_PRT += f"Additional context: {additional_context}"
 
-        # if no items left in the inventory, then we drop any money possible added
-        # as we do not let players gain money for nothing
-        for idx, item in enumerate(updates):
-            for s in self.__money_synonyms :
-                if s == item['item'].lower():
-                    # if 'gold' == item['item'].lower():
-                    if (len(updates) - len(items2pop)) == 1:
-                        items2pop.append(idx)
-                continue
+        if enforce_json_output:
+            try:
+                system_message = [{
+                    "role": "system",
+                    "content": f"""You MUST output a JSON object that strictly follows: {json.dumps(self.response_model.model_json_schema())}"""
+                }]
+            except Exception as e:
+                system_message = []
+        else:
+            system_message = []
 
-        result = []
-        for idx, item in enumerate(updates):
-            if idx not in items2pop:
-                result.append(item)
+        return system_message + [
+            {'role': 'system', 'content': self.sys_prt},
+            {'role': 'user', 'content': TASK_PRT}
+        ]
 
-        return result
-
-    def detect_inventory_change(self, human_msg: str,
-                                ai_response: str,
-                                inventory: List[str],
-                                **client_kw) -> Dict[str, Any]:
-
-        ai_updates = self.inventory_change_ai(human_msg, ai_response, **client_kw)
-        return self.validate_ai_updates(ai_updates, inventory)
+    def detect_inventory_change(self,
+                                action: str,
+                                context: str,
+                                inventory: List[str] = None,
+                                additional_context:str = None,
+                                enforce_json_output:bool=False,
+                                **llm_kwargs) -> pydantic.BaseModel:
+        """
+        Detects changes into player's inventory
+        :param action: str -- human action
+        :param context: str -- context (e.g. previous actions/etc)
+        :param inventory: List[str] -- list of inventory items
+        :param additional_context: str -- any additional information to consider
+        :param enforce_json_output: bool -- adds system prompt with the JSON schema, default: False
+        :param llm_kwargs: Dict[Any, Any] -- any LLM related kwargs
+        :return: pydantic.BaseModel -- Pydantic response model
+        """
+        logger.debug("Validating player action")
+        __msgs = self.compile_messages(action, context, inventory, additional_context, enforce_json_output)
+        self.last_submitted_messages = __msgs
+        raw_response = self.client.struct_output(__msgs, self.response_model, **llm_kwargs)
+        try:
+            self.stats = raw_response['stats']
+        except Exception as e:
+            logger.debug(f"Could not get call stats with \"{e}\"")
+        return raw_response['message']

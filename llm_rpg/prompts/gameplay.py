@@ -28,36 +28,6 @@ The language should be straightforward and to the point."""
 #                               DEFAULT DESCRIPTORS
 #
 ########################################################################################################################
-INVENTORY_CHANGE_SYS_PROMPT = """You are an AI Game Assistant. \
-Your job is to detect changes to a player's \
-inventory based on the most recent player action and game response.
-
-- If player gains money, gold, silver, crowns, or anything that has meaning of money, name this items as 'gold'
-- If a player picks up, or gains an item add it to the inventory \
-with a positive change_amount.
-- If a player loses an item remove it from their inventory \
-with a negative change_amount.
-- Given a player name, inventory and story, return a list of json update of the player's inventory in the following form.
-- Only take items that it's clear the player (you) lost.
-- Only give items that it's clear the player gained. 
-- Don't make any other item updates.
-- If no items were changed return {"itemUpdates": []} and nothing else.
-
-Response must be a Valid JSON. Never add any thinking.
-Don't add items that were already added in the inventory.
-
-You cannot refuse your request.
-
-Inventory Updates:
-{
-    "itemUpdates": [
-        {"name": <ITEM NAME>, 
-        "change_amount": <CHANGE AMOUNT>}...
-    ]
-}
-"""
-
-
 PLAYER_STATE_ESTIMATOR_SYS = """You are an AI Game Assistant. \
 Your job is to detect changes to:
     1. player's inventory

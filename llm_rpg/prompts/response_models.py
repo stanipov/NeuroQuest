@@ -32,27 +32,29 @@ class ValidateClassifyAction(BaseModel):
     valid_reason: List[ValidReason] = Field(description=_fld_val_reason_desc, default=[])
     action_type: list[ActionTypes] = Field(description='List of actions', default=[])
 
-# ------------------------------- Describe inventory -------------------------------
+# ------------------------------- Description of inventory item -------------------------------
 class InventoryItemDescription(BaseModel):
+    """Inventory item"""
     name: str = Field(description="Object's name")
     type: str = Field(description="Type of the object")
     description: str = Field(description="Object description", default="")
     action: str = Field(description="How this object works", default="")
     strength: str = Field(description="Strength of the object", default="")
 
-
-# ------------------------------- Inventory item base model -------------------------------
-class InventoryItem(BaseModel):
+# ------------------------------- Inventory Changes -------------------------------
+class InventoryItemChange(BaseModel):
+    """Inventory update unit"""
     item: str = Field(validation_alias='name',
                       description="Item name")
     change_amount: int = Field(validation_alias='amount',
                                default=0,
                                description="Number of items changed")
 
-class Inventory(BaseModel):
-    itemUpdates: List[InventoryItem]
+class InventoryUpdates(BaseModel):
+    """All inventory updates"""
+    itemUpdates: List[InventoryItemChange] = Field(default = [], description="List of inventory updates")
 
-# Player's state
+# ------------------------------- Player's state -------------------------------
 class PlayerState(BaseModel):
     physical: Optional[str] = Field(validation_alias='physical_state',
                                      default="",
@@ -60,6 +62,6 @@ class PlayerState(BaseModel):
     mental: Optional[str] = Field(validation_alias='mental_state',
                                      default="",
                                      description="Mental state of the character, e.g. aware, rested, etc.")
-    itemUpdates: List[InventoryItem]
+    itemUpdates: List[InventoryItemDescription]
     kingdom: Optional[str] = ""
     town: Optional[str] = ""
