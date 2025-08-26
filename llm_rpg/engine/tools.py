@@ -6,22 +6,20 @@ TODO: InventoryChange --> detects changes into inventory
 # - ObjectDetector --> detects all objects/tools used by the human and the AI player
 """
 import copy
-import logging
-
+import json
 import pydantic
-
-logger = logging.getLogger(__name__)
-
 from typing import Dict, List, Any
 
 from llm_rpg.templates.base_client import BaseClient
 from llm_rpg.prompts.gameplay import (STORY_TELLER_SYS_PRT,
                                       INVENTORY_CHANGE_SYS_PROMPT,
                                       gen_story_telling_msg)
-from llm_rpg.prompts.response_models import Inventory, ValidAction, InventoryItemDescription
+from llm_rpg.prompts.response_models import Inventory, InventoryItemDescription, _pick_actions
 from llm_rpg.prompts.lore_generation import (gen_obj_est_msgs, OBJECT_DESC)
 from llm_rpg.utils.helpers import parse2structure
 
+import logging
+logger = logging.getLogger(__name__)
 
 # ------------------------------------------------- OBJECT DESCRIPTOR --------------------------------------------------
 class ObjectDescriptor:
@@ -59,19 +57,19 @@ class InputValidator:
                           lore['towns']]
 
         # System prompts chunks to be combined later
-        self.sys_prompt_world_base= f"""You are AI game engine that verifies player's actions.
-Here are rules for the world you are playing in:
+        self.system_prompt = f"""You are RPG Game Engine. Task for user's action: 
+- is a game action, True/False
+- validate, True/False
+- classify, pick from {_pick_actions}
+Instructions for classification: 
+- all actions must be clear from the input and the context, ignore suggestions, discussions, offers, etc. 
+- default: []
+Rules:
 {lore['world_outline']}
-
-Known kingdoms and towns:
-{self.lore_kingdoms_towns}"""
-        self.sys_prompt_task_base = """Your task:
-- validate player's action (valid = True / valid = False). The action must be in agreement with the world rules and its description."""
-        self.sys_prompt_instructions_base = """Your instructions:
-- player is not allowed to act in contradiction to the world rules and world description;
-- player can't use items not in their inventory;
-- player can't gain items or abilities without a reason;
-- player can't act in a wrong location, if the current location is not clear, skip this validation;"""
+Following is forbidden:
+- contradiction to the world rules and world description
+- use items not in their inventory
+- gain items or abilities without a reason"""
 
         self.response_model = response_model
         self.llm = llm_client
@@ -80,87 +78,57 @@ Known kingdoms and towns:
         # the last submitted messages
         self.last_submitted_messages = {}
 
+
     def compile_messages(self,
-                           action: str,
-                           context: str,
-                           inventory: List[str] = None,
-                           current_location: List[str] = None,
-                           other_known_locations: List[Any] = None,
-                           phys_ment_state: Dict[str, Any] = None,
-                           enforce_json_output:bool=False) -> List[Dict[str, str]]:
+                         action: str,
+                         context: str,
+                         inventory: List[str] = None,
+                         additional_context:str = None,
+                         enforce_json_output:bool=False) -> List[Dict[str, str]]:
 
-        # Build the actual system prompt dynamically based on inputs
-        logger.debug("Building system prompt")
-        sys_prt = copy.copy(self.sys_prompt_world_base)
-
-        if other_known_locations is not None:
-            logger.debug("Other known location added")
-            sys_prt += f"\nOther known locations to consider: {other_known_locations}"
-
-        sys_prt += f"\n\n{self.sys_prompt_task_base}"
-        sys_prt += f"\n\n{self.sys_prompt_instructions_base}"
-        if phys_ment_state is not None:
-            logger.debug("Phys/mental instructions state added")
-            sys_prt += f"\n- player can't act in contradiction to their physical or mental state. E.g., a player can't lift heavy items while lacking a limb"
-
+        sys_prt = copy.copy(self.system_prompt)
         if enforce_json_output:
-            logger.debug("Enforcing pydantic schema in the system prompt")
-            sys_prt += f"\n\nStructure your output following this Pydantic schema:\n{self.response_model.model_json_schema()}"
+            try:
+                system_message = [{
+                    "role": "system",
+                    "content": f"""You MUST output a JSON object that strictly follows: {json.dumps(self.response_model.model_json_schema())}"""
+                }]
+            except Exception as e:
+                system_message = []
         else:
-            sys_prt += "\n\nYour response is a valid JSON."
+            system_message = []
 
-        # build the task message
-        logger.debug("Building task prompt")
-        val_task = f"""Verify and classify following player's action:
-{action}
-# ---------- in this context/history ----------
-{context}"""
-
-        if inventory is not None or phys_ment_state is not None or current_location is not None:
-            logger.debug("Adding additional information to the task")
-            val_task += "\n# ---------- Use this additional information about the player ----------"
+        TASK_VAL_INPUT_CLS = f"""User: {action}"""
+        if context != "":
+            TASK_VAL_INPUT_CLS += f"\nContext: {context}"
         if inventory is not None:
-            logger.debug("Added inventory")
-            val_task += f"\nPlayer's inventory: {inventory}"
-        if current_location is not None:
-            logger.debug("Added current location")
-            val_task += f"\nPlayer's current location: {current_location}"
-        if phys_ment_state is not None:
-            s = ""
-            if "physical" in phys_ment_state:
-                logger.debug("Added physical state")
-                s += f"\nPlayer's physical state: {phys_ment_state['physical']}"
-            if 'mental' in phys_ment_state:
-                logger.debug("Added mental state")
-                s += f"\nPlayer's mental state: {phys_ment_state['mental']}"
-            val_task += s
+            TASK_VAL_INPUT_CLS += f"\nUser inventory: {inventory}"
+        if additional_context is not None and additional_context != '':
+            TASK_VAL_INPUT_CLS += f"\nUse this additional context: {inventory}"
 
-        return [
+        return system_message + [
             {'role': 'system', 'content': sys_prt},
-            {'role': 'user', 'content': val_task}]
+            {'role': 'user', 'content': TASK_VAL_INPUT_CLS}]
 
 
     def validate_action(self,
                         action: str,
                         context: str,
                         inventory: List[str] = None,
-                        current_location: List[Any] = None,
-                        other_known_locations: List[str] = None,
-                        phys_ment_state: Dict[str, Any] = None,
+                        additional_context:str = None,
+                        enforce_json_output:bool=False,
                         **llm_kwargs) -> pydantic.BaseModel:
         """
         Validates player's action
         :param action: str -- action to validate
         :param context: str -- any additional context, such as previous responses, etc.
         :param inventory: str -- Optional, list of inventory items
-        :param current_location: List[Any] -- current location; could be {"kingdom": ..., "town": ...} or ["Kingdom: ...", ""Town: ...]
-        :param other_known_locations: List[str] -- Optional, list of any other known locations
-        :param phys_ment_state: Dict[str, Any] -- Optional, physical and mental state of the player
+        :param additional_context: str -- any additional context
         :param llm_kwargs: Any -- LLM kwargs
         :return: pydantic.BaseModel -- Pydantic response model
         """
         logger.debug("Validating player action")
-        __msgs = self.compile_messages(action, context, inventory, current_location, other_known_locations, phys_ment_state)
+        __msgs = self.compile_messages(action, context, inventory, additional_context, enforce_json_output)
         self.last_submitted_messages = __msgs
         raw_response = self.llm.struct_output(__msgs, self.response_model, **llm_kwargs)
         try:

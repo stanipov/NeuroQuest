@@ -5,12 +5,32 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
 
 
-# ------------------------------- Validate player's response -------------------------------
-class ValidAction(BaseModel):
+# ------------------------------- Validate and classify player's response -------------------------------
+_fld_reason_desc = """"Explain decision, 1-2 words. Pick from [lore, other, game]"""
+_fld_val_reason_desc = "Explain your decision and list all identified violations (3 words for each max) if valid == False, empty if valid == True"
+
+_pick_actions = ['inventory change',
+                 'mental state change',
+                 'physical state change',
+                 'relocation',
+                 'conversation',
+                 'fight']
+_fld_action_type_desc = f"Classify action, pick one from {_pick_actions} if valid == True else ''"
+
+class ActionTypes(BaseModel):
+    """Classification of game action"""
+    action_type: str = Field(description=_fld_action_type_desc, default="")
+
+class ValidReason(BaseModel):
+    """Reason for a valid/non-valid game action"""
+    reason: str = Field(description="If valid, explain in 3 words", default="")
+
+class ValidateClassifyAction(BaseModel):
     """Validator response model"""
-    valid: bool = Field(validation_alias='valid', description="Identify if player's actions are valid. Allowed values: True or False")
-    valid_reason: str = Field(description="Explain your decision on validity of player's action. Your response is a \
-list all identified violations (1-3 words for each) if valid == False, empty string if valid == True")
+    is_game_action: bool =  Field(validation_alias='is_game_action', description="True/False")
+    valid: bool = Field(validation_alias='valid', description="Valid game action? True or False")
+    valid_reason: List[ValidReason] = Field(description=_fld_val_reason_desc, default=[])
+    action_type: list[ActionTypes] = Field(description='List of actions', default=[])
 
 # ------------------------------- Describe inventory -------------------------------
 class InventoryItemDescription(BaseModel):
