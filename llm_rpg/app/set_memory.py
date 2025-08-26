@@ -76,7 +76,6 @@ def populate_db(game_lore: Dict[str, Any], db_path: str):
             'message': lore.pop('start')
         }
     ]
-
     memory.add_new_turn(messages, 0)
 
     # Creating players' state table
@@ -89,6 +88,7 @@ def populate_db(game_lore: Dict[str, Any], db_path: str):
                             "physical": str
                         },
                         primary_keys=["player"])
+
     logger.info("Creating \"location_hist\" table")
     memory.create_table(table_name="location_hist",
                         columns={
@@ -99,6 +99,7 @@ def populate_db(game_lore: Dict[str, Any], db_path: str):
                             "other": str
                         },
                         primary_keys=["turn", "player"])
+
     logger.info("Populating starting location")
     payload = {"kingdom": lore['start_location']['human']['kingdom'],
                "town": lore['start_location']['human']['town'],
@@ -107,6 +108,7 @@ def populate_db(game_lore: Dict[str, Any], db_path: str):
                "player": "human"}
     memory.add_row(table_name="location_hist", row=payload)
     logger.info("Added starting location for human player")
+
     for character in lore['start_location']['npc']:
         payload = {"kingdom": lore['start_location']['npc'][character]['kingdom'],
                    "town": lore['start_location']['npc'][character]['town'],
