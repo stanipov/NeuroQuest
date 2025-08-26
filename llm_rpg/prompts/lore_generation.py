@@ -159,20 +159,15 @@ information. You follow following instructions:
 
 
 # The prompt to generate rules fo a world similar to 'world_desc_default' above
-WORLD_RULES_GEN_SYS_PRT = """You are a fiction story writer. \
-Your task is to invent a fantasy world. Follow these instructions:
+WORLD_RULES_GEN_SYS_PRT = """You are a talented fiction story writer. \
+Task: invent a compelling and unique fantasy world. 
+Instructions:
 - Only generate in plain text without formatting.
-- You describe fundamental world mechanics, such as magic, technology, etc.
-- You describe how these mechanics interact with each other.
-- You invent races and species which inhabitate the world.
-- You describe how these species and races interact with each other.
-- You respond only with a list of rules/outlines of 3-5 words each.
-
-Example of your response:
-- Cold world, no sun, little hope
-- Gods sleep, dreams spawn horrors
-- Magic corrupts over time
-- Kingdoms war for power alone."""
+- describe fundamental world mechanics, such as magic, technology, etc.
+- describe how these mechanics interact with each other.
+- invent races and species which inhabitate the world.
+- describe how these species and races interact with each other.
+- respond only with a list of rules/outlines of 3-5 words each."""
 
 
 # A system prompt to describe objects based on instructions
@@ -208,48 +203,35 @@ def gen_world_rules_msgs(num_rules: int,
 
     if world_type.lower() == 'fantasy':
         world_types = {
-            "dark": f"""Create world description for a dark fantasy world. \
-        This world is grimdark, unfair, where ordinary people struggle and the few have everything.
-
-        Your inspiration is:
-        - Lord Of The Rings
-        - Norse mythology
-        - Slavic mythology
-
-        Provide a list of total {num_rules} in a plain text.""",
+            "dark": f"""Create world description for a fantasy world. \
+This world is miserable, depressing, unfair, where ordinary people struggle and the few have everything.
+Blend attributes of:
+- Lord Of The Rings
+- Norse and slavic mythology
+- Game of Thrones
+Avoid: eternal twilight, eternal night, eternal rain, etc.
+Provide a list of total {num_rules} in a plain text.""",
             "neutral": f"""Create a world description for a typical fantasy world, similar to Dungeons and Dragons.
-
-        Your inspiration is:
-        - Lord Of The Rings
-        - Norse mythology
-        - Slavic mythology
-
-        Provide a list of total {num_rules} in a plain text.""",
+Provide a list of total {num_rules} in a plain text.""",
             "funny": f"""Create a humorous fantasy world in a style of Discworld of Terry Pratchett.
-        Provide a list of total {num_rules} in a plain text."""
+Provide a list of total {num_rules} in a plain text."""
         }
 
     if world_type.lower() == 'sci-fi':
         world_types = {
-            "dark": f"""Create world description for a dark sci-fi world. \
-        This world is grimdark, unfair, where ordinary people struggle and the few have everything.
+            "dark": f"""Create world description for a sci-fi world. \
+This world is miserable, depressing, unfair, where ordinary people struggle and the few have everything.
+Blend attributes of:
+- Star Wars
+- Cyberpunk 2077
+- Altered Carbon
+- 1984
 
-        Your inspiration is:
-        - Lord Of The Rings
-        - Norse mythology
-        - Slavic mythology
-
-        Provide a list of total {num_rules} in a plain text.""",
+Provide a list of total {num_rules} in a plain text.""",
             "neutral": f"""Create a world description for a typical sci-fi world, similar to Star Wars or Mass Effect.
-
-        Your inspiration is:
-        - Lord Of The Rings
-        - Norse mythology
-        - Slavic mythology
-
-        Provide a list of total {num_rules} in a plain text.""",
+Provide a list of total {num_rules} in a plain text.""",
             "funny": f"""Create a humorous sci-fi world in a style of Futurama TV series.
-        Provide a list of total {num_rules} in a plain text."""
+Provide a list of total {num_rules} in a plain text."""
         }
 
     if world_type.lower() not in ['sci-fi', 'fantasy']:
