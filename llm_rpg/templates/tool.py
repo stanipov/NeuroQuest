@@ -37,7 +37,7 @@ class BaseTool(ABC):
             logger.warning(f"Could not dump pydantic model to JSON: \"{e}\"")
         return system_message
 
-    def __submit_messages(self, messages, **kwargs) -> pydantic.BaseModel:
+    def submit_messages(self, messages, **kwargs) -> pydantic.BaseModel:
         """Backend to run get structured input"""
         self.last_submitted_messages = messages
         raw_response = self.llm.struct_output(messages, self.response_model, **kwargs)

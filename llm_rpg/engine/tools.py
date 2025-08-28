@@ -119,7 +119,7 @@ Following is forbidden:
         """
         logger.info("Validating player action")
         __msgs = self.compile_messages(action, context, inventory, additional_context, enforce_json_output)
-        return self.__submit_messages(__msgs, **llm_kwargs)
+        return self.submit_messages(__msgs, **llm_kwargs)
 
 
 # ------------------------------------------------- INVENTORY UPDATER --------------------------------------------------
@@ -189,7 +189,7 @@ Never add any thinking."""
 
         logger.info("Detecting inventory change")
         __msgs = self.compile_messages(action, context, inventory, additional_context, enforce_json_output)
-        return self.__submit_messages(__msgs, **llm_kwargs)
+        return self.submit_messages(__msgs, **llm_kwargs)
 
 # ----------------------------------------- PLAYER'S PHYSICAL/MENTAL UPDATER -------------------------------------------
 class PlayerState(BaseTool):
@@ -234,4 +234,4 @@ class PlayerState(BaseTool):
         """
         logger.info("Detecting inventory change")
         __msgs = self.compile_messages(action, context, additional_context, enforce_json_output)
-        return self.__submit_messages(__msgs, **llm_kwargs)
+        return self.submit_messages(__msgs, **llm_kwargs)
