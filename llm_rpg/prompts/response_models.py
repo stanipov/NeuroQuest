@@ -55,13 +55,17 @@ class InventoryUpdates(BaseModel):
     itemUpdates: List[InventoryItemChange] = Field(default = [], description="List of inventory updates")
 
 # ------------------------------- Player's state -------------------------------
+class MentalCondition(BaseModel):
+    state: str= Field(default="", description="Mental condition, 1 word")
+
+class PhysicalCondition(BaseModel):
+    state: str= Field(default="", description="Physical condition, 1 word")
+
 class PlayerState(BaseModel):
-    physical: Optional[str] = Field(validation_alias='physical_state',
-                                     default="",
-                                     description="Physical state of the character, e.g. fresh, tired, etc.")
-    mental: Optional[str] = Field(validation_alias='mental_state',
-                                     default="",
-                                     description="Mental state of the character, e.g. aware, rested, etc.")
-    itemUpdates: List[InventoryItemDescription]
-    kingdom: Optional[str] = ""
-    town: Optional[str] = ""
+    alive: bool = Field(default= True, description="Alive? True/False")
+    physical: list[PhysicalCondition] = Field(validation_alias='physical_state',
+                                     default= [],
+                                     description="Physical condition")
+    mental: list[MentalCondition] = Field(validation_alias='mental_state',
+                                     default=[],
+                                     description="Mental condition")

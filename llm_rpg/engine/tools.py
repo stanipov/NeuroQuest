@@ -11,8 +11,13 @@ import pydantic
 from typing import Dict, List, Any
 
 from llm_rpg.templates.base_client import BaseClient
+from llm_rpg.templates.tool import BaseTool
 
-from llm_rpg.prompts.response_models import InventoryItemDescription, _pick_actions, InventoryUpdates
+from llm_rpg.prompts.response_models import (InventoryItemDescription,
+                                             _pick_actions,
+                                             InventoryUpdates,
+                                             PlayerState,
+                                             ValidateClassifyAction)
 from llm_rpg.prompts.lore_generation import (gen_obj_est_msgs)
 
 
@@ -40,10 +45,9 @@ class ObjectDescriptor:
 
 
 # ----------------------------------------------- PLAYER INPUT VALIDATOR -----------------------------------------------
-class InputValidator:
+class InputValidator(BaseTool):
     def __init__(self,
                  lore:Dict[str, Any],
-                 response_model: pydantic.BaseModel,
                  llm_client: BaseClient):
         """
         Action validator class. It builds system and tass prompts dynamically depending on available input
@@ -51,6 +55,7 @@ class InputValidator:
         :param response_model: pydantic.BaseModel -- response model
         :param llm_client: BaseClient -- LLM client for particular provider
         """
+        super().__init__(llm_client, ValidateClassifyAction)
         self.lore_kingdoms_towns = [f"Kingdom \"{x}\" --> Towns: {', '.join(list(lore['towns'][x].keys()))}" for x in
                           lore['towns']]
 
@@ -69,32 +74,19 @@ Following is forbidden:
 - use items not in their inventory
 - gain items or abilities without a reason"""
 
-        self.response_model = response_model
-        self.llm = llm_client
-        # stats for a recent call
-        self.stats = {}
-        # the last submitted messages
-        self.last_submitted_messages = {}
-
 
     def compile_messages(self,
                          action: str,
                          context: str,
                          inventory: List[str] = None,
                          additional_context:str = None,
-                         enforce_json_output:bool=False) -> List[Dict[str, str]]:
+                         enforce_json_output:bool = False) -> List[Dict[str, str]]:
 
         sys_prt = copy.copy(self.system_prompt)
+
+        system_message = []
         if enforce_json_output:
-            try:
-                system_message = [{
-                    "role": "system",
-                    "content": f"""You MUST output a JSON object that strictly follows: {json.dumps(self.response_model.model_json_schema())}"""
-                }]
-            except Exception as e:
-                system_message = []
-        else:
-            system_message = []
+            system_message = self.add_struct_sys_prompt()
 
         TASK_VAL_INPUT_CLS = f"""User: {action}"""
         if context != "":
@@ -105,11 +97,11 @@ Following is forbidden:
             TASK_VAL_INPUT_CLS += f"\nUse this additional context: {inventory}"
 
         return system_message + [
-            {'role': 'system', 'content': system_message+sys_prt},
+            {'role': 'system', 'content': sys_prt},
             {'role': 'user', 'content': TASK_VAL_INPUT_CLS}]
 
 
-    def validate_action(self,
+    def run(self,
                         action: str,
                         context: str,
                         inventory: List[str] = None,
@@ -125,23 +117,16 @@ Following is forbidden:
         :param llm_kwargs: Dict[Any, Any] -- any LLM related kwargs
         :return: pydantic.BaseModel -- Pydantic response model
         """
-        logger.debug("Validating player action")
+        logger.info("Validating player action")
         __msgs = self.compile_messages(action, context, inventory, additional_context, enforce_json_output)
-        self.last_submitted_messages = __msgs
-        raw_response = self.llm.struct_output(__msgs, self.response_model, **llm_kwargs)
-        try:
-            self.stats = raw_response['stats']
-        except Exception as e:
-            logger.debug(f"Could not get call stats with \"{e}\"")
-        return raw_response['message']
+        return self.__submit_messages(__msgs, **llm_kwargs)
 
 
-# TODO: finalize it:
 # ------------------------------------------------- INVENTORY UPDATER --------------------------------------------------
-class InventoryChange:
+class InventoryChange(BaseTool):
     def __init__(self, llm_client):
-        self.client = llm_client
-        self.response_model = InventoryUpdates
+        super().__init__(llm_client, InventoryUpdates)
+
         self.sys_prt = """You are RPG Game Engine. Detect changes to a player's inventory.
 Your instructions:
 - If a player picks up, or gains an item add it to the inventory with a positive change_amount.
@@ -151,11 +136,6 @@ Your instructions:
 - Ignore all items offered/gifted unless these were accepted.
 - Don't make any other item updates.
 Never add any thinking."""
-
-        # stats for a recent call
-        self.stats = {}
-        # the last submitted messages
-        self.last_submitted_messages = {}
 
 
     def compile_messages(self,
@@ -180,23 +160,16 @@ Never add any thinking."""
         if additional_context is not None and additional_context != '':
             TASK_PRT += f"Additional context: {additional_context}"
 
+        system_message = []
         if enforce_json_output:
-            try:
-                system_message = [{
-                    "role": "system",
-                    "content": f"""You MUST output a JSON object that strictly follows: {json.dumps(self.response_model.model_json_schema())}"""
-                }]
-            except Exception as e:
-                system_message = []
-        else:
-            system_message = []
+            system_message = self.add_struct_sys_prompt()
 
         return system_message + [
             {'role': 'system', 'content': self.sys_prt},
             {'role': 'user', 'content': TASK_PRT}
         ]
 
-    def detect_inventory_change(self,
+    def run(self,
                                 action: str,
                                 context: str,
                                 inventory: List[str] = None,
@@ -213,12 +186,52 @@ Never add any thinking."""
         :param llm_kwargs: Dict[Any, Any] -- any LLM related kwargs
         :return: pydantic.BaseModel -- Pydantic response model
         """
-        logger.debug("Validating player action")
+
+        logger.info("Detecting inventory change")
         __msgs = self.compile_messages(action, context, inventory, additional_context, enforce_json_output)
-        self.last_submitted_messages = __msgs
-        raw_response = self.client.struct_output(__msgs, self.response_model, **llm_kwargs)
-        try:
-            self.stats = raw_response['stats']
-        except Exception as e:
-            logger.debug(f"Could not get call stats with \"{e}\"")
-        return raw_response['message']
+        return self.__submit_messages(__msgs, **llm_kwargs)
+
+# ----------------------------------------- PLAYER'S PHYSICAL/MENTAL UPDATER -------------------------------------------
+class PlayerState(BaseTool):
+    def __init__(self, llm_client):
+        super().__init__(llm_client, PlayerState)
+        self.sys_prt = "You are RPG Game Engine. Task: detect changes in physical and mental state of the player."
+
+    def compile_messages(self,
+                         action: str,
+                         context: str,
+                         additional_context:str = None,
+                         enforce_json_output:bool=False) -> List[Dict[str, str]]:
+
+        task = f"Player: {action}"
+        if context is not None and context != "":
+            task += f"\nContext: {context}"
+        if additional_context is not None and additional_context != "":
+            task += f"\nAdditional context: {additional_context}"
+
+        system_message = []
+        if enforce_json_output:
+            system_message = self.add_struct_sys_prompt()
+
+        return system_message + [
+            {'role': 'system', 'content': self.sys_prt},
+            {'role': 'user', 'content': task}
+        ]
+
+    def run(self,action: str,
+            context: str,
+            additional_context:str = None,
+            enforce_json_output:bool=False,
+            **llm_kwargs):
+        """
+        Identifies changes of physical and mental state of a player
+        :param action: str -- human action
+        :param context: str -- context (e.g. previous actions/etc)
+        :param additional_context: str -- any additional information to consider
+        :param enforce_json_output: bool -- adds system prompt with the JSON schema, default: False
+        :param llm_kwargs: Dict[Any, Any] -- any LLM related kwargs
+        :return: pydantic.BaseModel -- Pydantic response model
+        """
+        logger.info("Detecting inventory change")
+        __msgs = self.compile_messages(action, context, additional_context, enforce_json_output)
+        return self.__submit_messages(__msgs, **llm_kwargs)
