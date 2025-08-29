@@ -78,28 +78,6 @@ def populate_db(game_lore: Dict[str, Any], db_path: str):
     ]
     memory.add_new_turn(messages, 0)
 
-    # Creating players' state table
-    logger.info("Creating \"players_state\" table")
-    memory.create_table(table_name="players_state",
-                        columns = {
-                            "player": str,
-                            "alive": bool,
-                            "mental": str,
-                            "physical": str
-                        },
-                        primary_keys=["player"])
-
-    logger.info("Creating \"location_hist\" table")
-    memory.create_table(table_name="location_hist",
-                        columns={
-                            "turn": int,
-                            "player": str,
-                            "kingdom": str,
-                            "town": str,
-                            "other": str
-                        },
-                        primary_keys=["turn", "player"])
-
     logger.info("Populating starting location")
     payload = {"kingdom": lore['start_location']['human']['kingdom'],
                "town": lore['start_location']['human']['town'],

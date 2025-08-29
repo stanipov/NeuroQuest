@@ -387,12 +387,14 @@ from llm_rpg.prompts.lore_generation import OBJECT_DESC
 class GameMemorySimple(SQLMemory):
     def __init__(self, db_path, npc_names: List[str] = []):
         """
-        Inits/loads all relevant tables
+        Inits/loads all relevant tables. Below is a complete list of tables used in the game.
+
         Inventory:
             character: str: Player/NPC name
             item: str: item name, e.g. "axe", etc.
             count: int: count of the items
             -- primary keys: character, item
+
         Items:
             item: str: name of the item
             description: str: item description
@@ -400,6 +402,7 @@ class GameMemorySimple(SQLMemory):
             action: str: how the item works
             strength: str: effect of the item
             -- primary key: item
+
         History:
             turn: int -- game turn, always starts from AI response
             ai_response: str -- game response on joint actions of a human and npcs, i.e. it follows all these
@@ -407,10 +410,30 @@ class GameMemorySimple(SQLMemory):
             <npc_1 name> -- utterance/actions of the NPC_1, will be always name of the NPC character
             ...
             <npc_N name> --utterance/actions of the NPC_N, will be always name of the NPC character
+
+        Location history:
+            The table tracks current locations along with destinations. Players can be in a current Loc 1 and decide on
+            the same turn to relocate to Loc 2. While they do it, they might fail. Capturing the current location and the
+            intended location will help the game logic to track locations correctly
+
+            "turn": int  -- game turn, always starts from AI response
+            "player": str -- player's name (human or NPC names)
+            "kingdom": str -- Kindgom name
+            "town": str -- town name
+            "other": str -- any additional clarifications, e.g. townhall, swamp, etc.
+            "status": str -- current or planned location.
+
+        Player state:
+            "player": str -- player name (human or NPC name)
+            "alive": bool -- alive or dead
+            "mental": str -- mental state (e.g. depressed, alert, etc.)
+            "physical": str -- physical state (e.g. fresh, wounded, etc.)
+
         :return: None
         """
         super().__init__(db_path)
 
+        # ----------- Inventory table -----------
         self.inventory_schema = {
             "character": str,
             "item": str,
@@ -419,6 +442,7 @@ class GameMemorySimple(SQLMemory):
         self.inventory_pk = ["character", "item"]
         self.inventory_tbl_name = "inventory"
 
+        # ----------- Items table -----------
         self.items_schema = {
             "name": str,
         }
@@ -427,6 +451,7 @@ class GameMemorySimple(SQLMemory):
         self.items_pk = ['name']
         self.items_tbl_name = "items"
 
+        # ----------- History table -----------
         self.history_schema = {"turn": int,
                                "ai_response": str,
                                "human_response": str}
@@ -435,6 +460,28 @@ class GameMemorySimple(SQLMemory):
                 self.history_schema[npc_name] = str
         self.history_pk = ['turn']
         self.history_tbl_name = 'history'
+
+        # ----------- Location history table -----------
+        self.locations_tbl_name = "location_hist"
+        self.locations_tbl_shema = {
+            "turn": int,
+            "player": str,
+            "kingdom": str,
+            "town": str,
+            "other": str,
+            "status": str
+        },
+        self.locations_tbl_pk = ["turn", "player"]
+
+        # ----------- Player's state table -----------
+        self.players_state_tbl_name = "players_state",
+        self.players_state_tbl_schema = {
+            "player": str,
+            "alive": bool,
+            "mental": str,
+            "physical": str
+        },
+        self.players_state_tbl_pk = ["player"]
 
         if self.inventory_tbl_name not in self.models:
             logger.info(f"Creating the \"{self.inventory_tbl_name}\" table")
@@ -458,6 +505,18 @@ class GameMemorySimple(SQLMemory):
                               columns=self.history_schema,
                               primary_keys=self.history_pk,
                               index_keys=self.history_pk)
+
+        if self.locations_tbl_name not in self.models:
+            logger.info(f"Creating the \"{self.locations_tbl_name}\" table")
+            self.create_table(table_name=self.locations_tbl_name,
+                              columns=self.locations_tbl_shema,
+                              primary_keys=self.locations_tbl_pk)
+
+        if self.players_state_tbl_name not in self.models:
+            logger.info(f"Creating the \"{self.players_state_tbl_name}\" table")
+            self.create_table(table_name=self.players_state_tbl_name,
+                              columns=self.players_state_tbl_schema,
+                              primary_keys=self.players_state_tbl_pk)
 
 
     def add_inventory_items(self, character: str,
