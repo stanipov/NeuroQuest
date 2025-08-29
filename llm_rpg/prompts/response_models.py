@@ -69,3 +69,19 @@ class PlayerState(BaseModel):
     mental: list[MentalCondition] = Field(validation_alias='mental_state',
                                      default=[],
                                      description="Mental condition")
+
+
+# ------------------------------- Player's location -------------------------------
+class CurrentLocation(BaseModel):
+    kingdom: str = Field(description="Current kingdom", default="")
+    town: str = Field(description="Current town", default="")
+    extra: str = Field(description="Fine-grained details of the current location", default="")
+
+class DestinationLocation(BaseModel):
+    kingdom: str = Field(description="Destination kingdom", default="")
+    town: str = Field(description="Destination town", default="")
+    extra: str = Field(description="Fine-grained details of the destination location", default="")
+
+class PlayerLocation(BaseModel):
+    current: CurrentLocation = Field(description="Current location", default=[])
+    destination: DestinationLocation = Field(description="Destination", default=[])

@@ -17,7 +17,8 @@ from llm_rpg.prompts.response_models import (InventoryItemDescription,
                                              _pick_actions,
                                              InventoryUpdates,
                                              PlayerState,
-                                             ValidateClassifyAction)
+                                             ValidateClassifyAction,
+                                             PlayerLocation)
 from llm_rpg.prompts.lore_generation import (gen_obj_est_msgs)
 
 
@@ -33,7 +34,6 @@ class ObjectDescriptor:
         self.client = client
         self.stats = {}
         self.response_model = InventoryItemDescription
-
 
     def describe(self, obj: str, **kwargs) -> Dict[str, str]:
         msgs = gen_obj_est_msgs(obj)
@@ -74,7 +74,6 @@ Following is forbidden:
 - use items not in their inventory
 - gain items or abilities without a reason"""
 
-
     def compile_messages(self,
                          action: str,
                          context: str,
@@ -99,7 +98,6 @@ Following is forbidden:
         return system_message + [
             {'role': 'system', 'content': sys_prt},
             {'role': 'user', 'content': TASK_VAL_INPUT_CLS}]
-
 
     def run(self,
                         action: str,
@@ -137,7 +135,6 @@ Your instructions:
 - Don't make any other item updates.
 Never add any thinking."""
 
-
     def compile_messages(self,
                          action: str,
                          context: str,
@@ -154,7 +151,7 @@ Never add any thinking."""
         :return:
         """
         TASK_PRT = f"""User actions: {action}"""
-        if context != '':
+        if context is not None and context != '':
             TASK_PRT += f"""Context: {context}"""
         TASK_PRT += f"""User's inventory: {inventory}"""
         if additional_context is not None and additional_context != '':
@@ -222,7 +219,7 @@ class PlayerState(BaseTool):
             context: str,
             additional_context:str = None,
             enforce_json_output:bool=False,
-            **llm_kwargs):
+            **llm_kwargs) -> PlayerState:
         """
         Identifies changes of physical and mental state of a player
         :param action: str -- human action
@@ -233,5 +230,44 @@ class PlayerState(BaseTool):
         :return: pydantic.BaseModel -- Pydantic response model
         """
         logger.info("Detecting inventory change")
+        __msgs = self.compile_messages(action, context, additional_context, enforce_json_output)
+        return self.submit_messages(__msgs, **llm_kwargs)
+
+
+# ----------------------------------------- PLAYER'S LOCATION UPDATER -------------------------------------------
+class PlayerLocation(BaseTool):
+    def __init__(self, llm_client):
+        super().__init__(llm_client, PlayerLocation)
+        self.sys_prt = """You are RPG Game Engine. Task to identify:
+- current location if any
+- destination location if any"""
+
+    def compile_messages(self,
+                         action: str,
+                         context: str,
+                         additional_context: str = None,
+                         enforce_json_output: bool = False) -> List[Dict[str, str]]:
+
+        TASK_PRT = f"""Player's actions: {action}"""
+        if context is not None and context != '':
+            TASK_PRT += f"""Context: {context}"""
+        if additional_context is not None and additional_context != '':
+            TASK_PRT += f"Additional context: {additional_context}"
+
+        system_message = []
+        if enforce_json_output:
+            system_message = self.add_struct_sys_prompt()
+
+        return system_message + [
+            {'role': 'system', 'content': self.sys_prt},
+            {'role': 'user', 'content': TASK_PRT}
+        ]
+
+    def run(self, action: str,
+            context: str,
+            additional_context: str = None,
+            enforce_json_output: bool = False,
+            **llm_kwargs) -> PlayerLocation:
+        logger.info("Detecting location change")
         __msgs = self.compile_messages(action, context, additional_context, enforce_json_output)
         return self.submit_messages(__msgs, **llm_kwargs)
