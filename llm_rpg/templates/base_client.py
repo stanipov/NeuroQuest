@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Union
 from pydantic import BaseModel
+import json
 
 
 class BaseClient(ABC):
@@ -25,6 +26,12 @@ class BaseClient(ABC):
         :return: This method is abstract and will be overridden by subclasses.
         """
         self.model_name = model_name
+
+    def enforce_struct_output(self, response_model) -> List[Dict[str, str]]:
+        """Adds another system prompt to enforce JSON output"""
+        return [{
+            "role": "system",
+            "content": f"""You MUST output a JSON object that strictly follows this schema: {json.dumps(response_model.model_json_schema())}"""}]
 
     @abstractmethod
     def chat(self, messages: List[Dict[Any, Any]], *arg, **kwargs) -> Dict[str, Any]:
