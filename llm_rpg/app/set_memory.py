@@ -6,7 +6,7 @@ Return:
     1. lore ready to use (i.e. without inventories, etc)
     2. memory class instance
 """
-from llm_rpg.engine.memory import GameMemorySimple
+from llm_rpg.engine.memory import SQLGameMemory
 from typing import Dict, List, Any
 import os
 import logging
@@ -24,7 +24,7 @@ def populate_db(game_lore: Dict[str, Any], db_path: str):
     npc_names = list(lore['npc'].keys())
     inventory_lut = lore.pop('inventory_lut')
 
-    memory = GameMemorySimple(db_path, npc_names)
+    memory = SQLGameMemory(db_path, npc_names)
 
     # human player
     logger.info(f"Populating initial inventory for the human player")
@@ -83,8 +83,9 @@ def populate_db(game_lore: Dict[str, Any], db_path: str):
                "town": lore['start_location']['human']['town'],
                "other": "",
                "turn": 0,
-               "player": "human"}
-    memory.add_row(table_name="location_hist", row=payload)
+               "player": "human",
+               "status": 'current'}
+    memory.add_row(table_name=memory.locations_tbl_name, row=payload)
     logger.info("Added starting location for human player")
 
     for character in lore['start_location']['npc']:
@@ -92,9 +93,21 @@ def populate_db(game_lore: Dict[str, Any], db_path: str):
                    "town": lore['start_location']['npc'][character]['town'],
                    "other": "",
                    "turn": 0,
-                   "player": character}
-        memory.add_row(table_name="location_hist", row=payload)
+                   "player": character,
+                   "status": 'current'}
+        memory.add_row(table_name=memory.locations_tbl_name, row=payload)
         logger.info(f"Added starting location for \"{character}\" player")
+
+    # Populating mental/physical state
+    logger.info(f"Populating the state table \"{memory.players_state_tbl_name}\"")
+    for character in ['human'] + npc_names:
+        payload = {
+            'player': character,
+            'alive': True,
+            'physical': '',
+            'mental' : ''
+        }
+        memory.add_row(table_name=memory.players_state_tbl_name, row=payload)
 
     return lore, memory
 
@@ -105,7 +118,7 @@ def load_data(game_lore: Dict[str, Any], db_path: str):
         raise Exception(f"DB does not exist: \"{db_path}\"!")
 
     npc_names = list(lore['npc'].keys())
-    memory = GameMemorySimple(db_path, npc_names)
+    memory = SQLGameMemory(db_path, npc_names)
 
     expected_tables = [memory.history_tbl_name, memory.inventory_tbl_name, memory.items_tbl_name]
     for tbl in expected_tables:

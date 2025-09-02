@@ -380,11 +380,34 @@ class SQLMemory:
 
         return results
 
-# ----------------------------- Memory for the game -----------------------------
+    def list_all_rows(self, table_name: str) -> List[Dict[str, Any]]:
+        """
+        Returns all rows from a table as a list of dictionaries.
 
+        :param table_name: str -- table name to query
+        :return: List[Dict[str, Any]] -- list of all rows, each row as a dictionary
+        """
+        if table_name not in self.models:
+            logger.warning(f"\"{table_name}\" is not found!")
+            return []
+
+        model = self.models[table_name]
+        result = []
+
+        with self.Session() as session:
+            try:
+                query = session.query(model)
+                for item in query.all():
+                    result.append({col.name: getattr(item, col.name) for col in model.__table__.columns})
+            except Exception as e:
+                logger.error(f"Error listing all rows from table \"{table_name}\": {e}")
+
+        return result
+
+# ----------------------------- Memory for the game -----------------------------
 # RAG augmented memory is planned
 from llm_rpg.prompts.lore_generation import OBJECT_DESC
-class GameMemorySimple(SQLMemory):
+class SQLGameMemory(SQLMemory):
     def __init__(self, db_path, npc_names: List[str] = []):
         """
         Inits/loads all relevant tables. Below is a complete list of tables used in the game.
@@ -470,17 +493,17 @@ class GameMemorySimple(SQLMemory):
             "town": str,
             "other": str,
             "status": str
-        },
+        }
         self.locations_tbl_pk = ["turn", "player"]
 
         # ----------- Player's state table -----------
-        self.players_state_tbl_name = "players_state",
+        self.players_state_tbl_name = "players_state"
         self.players_state_tbl_schema = {
             "player": str,
             "alive": bool,
             "mental": str,
             "physical": str
-        },
+        }
         self.players_state_tbl_pk = ["player"]
 
         if self.inventory_tbl_name not in self.models:
@@ -537,12 +560,13 @@ class GameMemorySimple(SQLMemory):
                 "count": items[item]
             }
             try:
-                self.add_row("inventory", row, strict=True)
+                self.add_row(self.inventory_tbl_name, row, strict=True)
             except Exception as e:
                 if not "UNIQUE constraint failed" in str(e):
                     raise e
                 else:
-                    logger.debug(f"{item} exists in the inventory table, skipping")
+                    logger.debug(f"{item} exists in the \"{self.inventory_tbl_name}\" table, skipping")
+                    logger.debug(f"Full error: {item}: {e}")
 
         for item in items_lut:
             row = {
@@ -557,7 +581,8 @@ class GameMemorySimple(SQLMemory):
                 if not "UNIQUE constraint failed" in str(e):
                     raise e
                 else:
-                    logger.debug(f"{item} exists in the inventory table, skipping")
+                    logger.debug(f"{item} exists in the \"{self.items_tbl_name}\" table, skipping")
+                    logger.debug(f"Full error: {item}: {e}")
 
 
     def remove_inventory_items(self, character: str, items: List[str]):
@@ -582,8 +607,53 @@ class GameMemorySimple(SQLMemory):
         # 2. items table
         self.remove_rows(self.items_tbl_name, rows2del_items)
 
+    def update_inventory_item(self, item: Dict[str, Any]):
+        """
+        Updates the count of an inventory item for a specific character.
+
+        :param item: Dict[str, Any] -- {
+            "item": item name,
+            "count_change": change in count (can be positive or negative),
+            "character": character name
+        }
+        :return: None
+        """
+        # Validate required fields
+        required_fields = ["item", "count_change", "character"]
+        if not all(field in item for field in required_fields):
+            raise ValueError(f"Missing required fields. Expected: {required_fields}, got: {list(item.keys())}")
+
+        character = item["character"]
+        item_name = item["item"]
+        count_change = item["count_change"]
+
+        # Check if the item exists in the inventory for this character
+        existing_items = self.query_rows_by_keys(
+            self.inventory_tbl_name,
+            [{"character": character, "item": item_name}]
+        )
+
+        if existing_items:
+            # Item exists, update the count
+            current_count = existing_items[0]["count"]
+            new_count = current_count + count_change
+
+            update_data = {
+                "character": character,
+                "item": item_name,
+                "count": new_count
+            }
+
+            self.update_row(self.inventory_tbl_name, update_data, strict=True)
+            logger.debug(f"Updated {item_name} for {character}: {current_count} -> {new_count}")
+        else:
+            # Item doesn't exist, but we don't create new entries if not present
+            logger.warning(
+                f"Item '{item_name}' not found in inventory for character '{character}'. No update performed.")
+
 
     def get_inventory_items(self, character: str) -> List[Dict[str, Any]]:
+        """Returns all inventory items along with their description"""
         result = []
         inventory = self.models[self.inventory_tbl_name].__table__
         items = self.models[self.items_tbl_name].__table__
@@ -594,12 +664,21 @@ class GameMemorySimple(SQLMemory):
                 select(*inv_columns, *item_columns)
                 .join(items, inventory.c.item == items.c.name)
                 .where(inventory.c.character == character)
+                .where(inventory.c.count>0)
             )
             ans = session.execute(stmt)
             for row in ans:
                 result.append(dict(row._mapping))
 
         return result
+
+
+    def list_inventory_items(self, character: str) -> List[str]:
+        """Lists all inventory items for a character (no details returned)"""
+        items = []
+        for x in self.get_inventory_items(character):
+            items.append(x['item'])
+        return items
 
 
     def get_most_recent_turn(self) -> Tuple[int, bool]:
@@ -640,8 +719,8 @@ class GameMemorySimple(SQLMemory):
         logger.debug(f"Game turn: {turn}")
         for msg in messages:
             if msg['role'] not in self.history_schema:
-                logger.error(f"{msg['role']} is not within acceptable shema!")
-                raise ValueError(f"{msg['role']} is not within acceptable shema!")
+                logger.error(f"{msg['role']} is not within acceptable schema!")
+                raise ValueError(f"{msg['role']} is not within acceptable schema!")
 
             row[msg['role']] = msg['message']
         self.add_row(self.history_tbl_name, row, True)
@@ -673,8 +752,8 @@ class GameMemorySimple(SQLMemory):
 
         for msg in messages:
             if msg['role'] not in self.history_schema:
-                logger.error(f"{msg['role']} is not within acceptable shema!")
-                raise ValueError(f"{msg['role']} is not within acceptable shema!")
+                logger.error(f"{msg['role']} is not within acceptable schema!")
+                raise ValueError(f"{msg['role']} is not within acceptable schema!")
 
             row[msg['role']] = msg['message']
 
