@@ -49,6 +49,8 @@ class InventoryItemChange(BaseModel):
     change_amount: int = Field(validation_alias='amount',
                                default=0,
                                description="Number of items changed")
+    subject: str = Field(description="Who's inventory is changed?", default="")
+    source: str = Field(description="Who provided this inventory item?", default="")
 
 class InventoryUpdates(BaseModel):
     """All inventory updates"""
@@ -85,3 +87,11 @@ class DestinationLocation(BaseModel):
 class PlayerLocation(BaseModel):
     current: CurrentLocation = Field(description="Current location", default=[])
     destination: DestinationLocation = Field(description="Destination", default=[])
+
+# ------------------------------- NPC -------------------------------
+class NPCResponseModel(BaseModel):
+    """Response model for NPC action"""
+    action: str = Field(description="Your action. 1-2 sentences", defaut = "")
+    state: PlayerState = Field(description="Determine player's state", default=None)
+    inventory_update: InventoryUpdates = Field(description="Detect inventory updates", default=None)
+    location: PlayerLocation = Field(description="Player's current location and possibly new destination", default=None)

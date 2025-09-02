@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------- OBJECT DESCRIPTOR --------------------------------------------------
 class ObjectDescriptor:
     """
-    Generates descriptions and actions for a list of items (e.g. axe, spell, etc)
+    Generates descriptions and actions for a list of items (e.g. axe, spell, etc.)
     """
     def __init__(self, client: BaseClient) -> None:
         self.client = client
@@ -87,11 +87,11 @@ Following is forbidden:
         if enforce_json_output:
             system_message = self.add_struct_sys_prompt()
 
-        TASK_VAL_INPUT_CLS = f"""User: {action}"""
+        TASK_VAL_INPUT_CLS = f"""Player: {action}"""
         if context != "":
             TASK_VAL_INPUT_CLS += f"\nContext: {context}"
         if inventory is not None:
-            TASK_VAL_INPUT_CLS += f"\nUser inventory: {inventory}"
+            TASK_VAL_INPUT_CLS += f"\nPlayer inventory: {inventory}"
         if additional_context is not None and additional_context != '':
             TASK_VAL_INPUT_CLS += f"\nUse this additional context: {inventory}"
 
@@ -133,6 +133,8 @@ Your instructions:
 - Only give items that it's clear the player gained. 
 - Ignore all items offered/gifted unless these were accepted.
 - Don't make any other item updates.
+- Identify who is subject to inventory changes.
+- Identify who provided/gave/etc inventory items.
 Never add any thinking."""
 
     def compile_messages(self,
@@ -150,10 +152,10 @@ Never add any thinking."""
         :param enforce_json_output: bool -- adds system prompt with the JSON schema, default: False
         :return:
         """
-        TASK_PRT = f"""User actions: {action}"""
+        TASK_PRT = f"""Player's actions: {action}"""
         if context is not None and context != '':
             TASK_PRT += f"""Context: {context}"""
-        TASK_PRT += f"""User's inventory: {inventory}"""
+        TASK_PRT += f"""Player's inventory: {inventory}"""
         if additional_context is not None and additional_context != '':
             TASK_PRT += f"Additional context: {additional_context}"
 
