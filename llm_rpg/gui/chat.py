@@ -9,6 +9,8 @@ from rich.console import Group
 from llm_rpg.clients.dummy_llm import DummyLLM
 from llm_rpg.gui.console_manager import ConsoleManager
 
+import logging
+logger = logging.getLogger(__name__)
 
 class RPGChatInterface:
     """Main RPG chat interface with proper threading for streaming"""
@@ -21,6 +23,16 @@ class RPGChatInterface:
         # Service commands configuration
         self.service_commands = ["/help", "/inventory", "/stats"]
         self.service_command_hooks = {}
+
+        # Processing user input
+        self.user_input_processing_commands = []
+        self.user_input_processing_hooks = {}
+
+        # Post-processing streaming response
+        self.post_processing_commands = []
+        self.post_processing_hooks = {}
+
+        self.__hook_stacks = set('service', 'user_input', 'post_processing')
 
         # Streaming state
         self.streaming_active = False
@@ -45,10 +57,44 @@ class RPGChatInterface:
                 Text(f"⚠️ Unknown command: {base_cmd}", style=self.styles.get_style("error"))
             )
 
-    def register_service_command(self, command: str, handler: Callable) -> None:
+    def __register_service_command(self, command: str, handler: Callable) -> None:
         """Register a handler for a service command"""
         self.service_commands.append(command)
         self.service_command_hooks[command] = handler
+        logger.info(f"Registered \"{command}\" as service command")
+
+    def __register_input_processing_command(self, command: str, handler: Callable) -> None:
+        """Register a handler for user input processing"""
+        self.user_input_processing_commands.append(command)
+        self.user_input_processing_hooks[command] = handler
+        logger.info(f"Registered \"{command}\" as user input processing command")
+
+    def __register_post_processing_command(self, command: str, handler: Callable) -> None:
+        """Register a handler for a post-streaming/response processing"""
+        self.post_processing_commands.append(command)
+        self.post_processing_hooks[command] = handler
+        logger.info(f"Registered \"{command}\" as user post-response processing command")
+
+    def register_command_hooks(self, stack: str, command: str, handler: Callable) -> None:
+        """
+        Base method to register command hooks
+
+        :param stack: 
+        :param command:
+        :param handler:
+        :return:
+        """
+        #  set('service', 'user_input', 'post_processing')
+        if stack not in self.__hook_stacks:
+            logger.error(f"Hook stack not recognised. Got {stack}, expected: {self.__hook_stacks}")
+            raise ValueError(f"Hook stack not recognised. Got {stack}, expected: {self.__hook_stacks}")
+
+        if stack.lower() == 'service':
+            self.__register_service_command(command, handler)
+        if stack.lower() == "user_input" or stack.lower() == "user":
+            self.__register_input_processing_command(command, handler)
+        if stack.lower() == "post_processing" or stack.lower() == 'post':
+            self.__register_post_processing_command(command, handler)
 
     def _show_typing_indicator(self) -> Live:
         """Show animated typing indicator"""
@@ -64,6 +110,7 @@ class RPGChatInterface:
     def _generate_response_in_thread(self, processed_input: str):
         """Run response generation in background thread"""
         try:
+            # TODO: replace with a proper response generator from the processing hook
             for chunk in generate_response(processed_input):
                 self.response_queue.put(chunk)
             self.response_queue.put(None)  # Signal completion
@@ -112,6 +159,7 @@ class RPGChatInterface:
 
     def _process_user_message(self, user_input: str):
         """Full processing pipeline for user messages"""
+        # TODO add proper handling of user input
         processed_input = process_input_placeholder(user_input)
         return self._display_streaming_response(processed_input)
 
@@ -135,7 +183,8 @@ class RPGChatInterface:
                 if self._is_service_command(user_input):
                     self._process_service_command(user_input)
                 else:
-                    self._process_user_message(user_input)
+                    # capture the game response
+                    game_response = self._process_user_message(user_input)
 
         except KeyboardInterrupt:
             self.running = False
