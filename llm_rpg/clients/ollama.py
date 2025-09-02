@@ -115,12 +115,9 @@ class OllamaW(BaseClient):
         if "temperature" in kwargs:
             opts.update({"temperature": kwargs['temperature']})
 
+        system_message = []
         try:
-            schema = pydantic_model.model_json_schema()
-            system_message = [{
-                "role": "system",
-                "content": f"Respond matching: {json.dumps(schema)}"
-            }]
+            system_message = self.enforce_struct_output(pydantic_model)
         except Exception as e:
             system_message = []
 

@@ -34,11 +34,9 @@ class LocalLLMClient(BaseClient):
         return result
 
     def struct_output(self, messages: List[Dict[Any, Any]], response_model: BaseModel, **kwargs) -> Any:
+        system_message = []
         try:
-            system_message = [{
-                "role": "system",
-                "content": f"""You MUST output a JSON object that strictly follows this schema: {json.dumps(response_model.model_json_schema())}"""
-            }]
+            system_message = self.enforce_struct_output(response_model)
         except Exception as e:
             system_message = []
 

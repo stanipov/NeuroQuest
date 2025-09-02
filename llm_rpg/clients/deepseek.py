@@ -29,9 +29,9 @@ class DeepSeekW_requests(BaseClient):
         :param model_name: Name of the DeepSeek model (default: 'deepseek-chat')
         :param api_key: Your DeepSeek API key
         """
+        super().__init__(model_name)
         self.api_key = api_key
         self.base_url = "https://api.deepseek.com/v1"
-        self.model_name = model_name
         self.is_reasoner = "reasoner" in model_name.lower()
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -158,9 +158,7 @@ class DeepSeekW_requests(BaseClient):
         """
         # Add instruction to format output as JSON matching the pydantic model
         try:
-            system_message = [{
-            "role": "system",
-            "content": f"""You MUST output a JSON object that strictly follows this schema: {json.dumps(pydantic_model.model_json_schema())}"""}]
+            system_message = self.enforce_struct_output(pydantic_model)
         except Exception as e:
             system_message = []
 
