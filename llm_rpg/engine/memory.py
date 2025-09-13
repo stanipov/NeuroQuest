@@ -565,7 +565,7 @@ class SQLGameMemory(SQLMemory):
                 if not "UNIQUE constraint failed" in str(e):
                     raise e
                 else:
-                    logger.debug(f"{item} exists in the \"{self.inventory_tbl_name}\" table, skipping")
+                    logger.debug(f"\"{item}\" exists in the \"{self.inventory_tbl_name}\" table, skipping")
                     logger.debug(f"Full error: {item}: {e}")
 
         for item in items_lut:
@@ -581,7 +581,7 @@ class SQLGameMemory(SQLMemory):
                 if not "UNIQUE constraint failed" in str(e):
                     raise e
                 else:
-                    logger.debug(f"{item} exists in the \"{self.items_tbl_name}\" table, skipping")
+                    logger.debug(f"\"{item}\" exists in the \"{self.items_tbl_name}\" table, skipping")
                     logger.debug(f"Full error: {item}: {e}")
 
 
