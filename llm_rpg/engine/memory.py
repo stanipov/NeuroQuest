@@ -607,6 +607,7 @@ class SQLGameMemory(SQLMemory):
         # 2. items table
         self.remove_rows(self.items_tbl_name, rows2del_items)
 
+
     def update_inventory_item(self, item: Dict[str, Any]):
         """
         Updates the count of an inventory item for a specific character.

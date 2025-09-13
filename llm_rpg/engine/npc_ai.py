@@ -58,6 +58,12 @@ class NPC(BaseTool):
         self.recent_response = None
 
 
+    def __is_human_player(self, name) -> bool:
+        """Is this a human player name?"""
+        candidates = [self.human_player_name.lower(), 'human', 'player']
+        return name.lower() in candidates
+
+
     def __list_inventory_items(self):
         """Updates inventory listing"""
         self.inventory_items = self.sql_memory.list_inventory_items(self.name)
@@ -67,6 +73,7 @@ class NPC(BaseTool):
         self.inventory_items_desc = {}
         for x in self.sql_memory.list_all_rows(self.sql_memory.items_tbl_name):
             self.inventory_items_desc[x['name']] = x
+
 
     def __base_sys_prt(self):
         """Generates a base and constant system prompt"""
@@ -93,6 +100,7 @@ Instructions:
 - can use only items in her inventory
 - if you decide to change your inventory, provide inventory changes with items and counts"""
 
+
     def compile_messages(self, enforce_struct_output:bool=False):
         """Generates the messages to submit to the LLM"""
         self.__list_inventory_items()
@@ -109,7 +117,7 @@ Instructions:
         if len(conversation_hist) > 1:
             conv_context = self.format_memory_extract(conversation_hist[:-1])
 
-        current_turn = conversation_hist[-1]
+        current_turn = conversation_hist[0]
         TASK = f"""What will you do?
 
     Situation: {current_turn['ai_response']}
@@ -158,6 +166,7 @@ Instructions:
 
         return '\n'.join(context)
 
+
     def run(self, enforce_struct_output:bool=False, **kwargs):
         llm_messages = self.compile_messages(enforce_struct_output)
         response = self.submit_messages(llm_messages, **kwargs)
@@ -165,15 +174,25 @@ Instructions:
 
         try:
             self.update_turn(response)
-            self.update_state(response)
+        except Exception as e:
+            logger.error(f"Update turn: {e}")
 
+        try:
+            self.update_state(response)
+        except Exception as e:
+            logger.error(f"Update state: {e}")
+
+        try:
             self.update_inventory(response)
             self.__list_inventory_items()
             self.__upd_inv_items_lut()
+        except Exception as e:
+            logger.error(f"Update inventory: {e}")
 
+        try:
             self.update_location(response)
         except Exception as e:
-            logger.error(e)
+            logger.error(f"Update location: {e}")
 
         return response
 
@@ -186,13 +205,16 @@ Instructions:
 
 
     def update_inventory(self, response):
+        logger.debug("Updating inventory of any")
         # List all items in the items table to see if we need to describe any new item
         all_inv_items = set()
         for row in self.sql_memory.list_all_rows(self.sql_memory.items_tbl_name):
             all_inv_items.add(row['name'])
+
         new_inventory_items = {}
         for item in response.inventory_update.itemUpdates:
             if item.item not in all_inv_items:
+                logger.debug(f"New item not in LUT: {item.item}")
                 new_inventory_items[item.item] = {
                     "description": {},
                     "owner": item.subject,
@@ -219,6 +241,8 @@ Instructions:
 
         # update all items now
         for item in response.inventory_update.itemUpdates:
+            logger.debug(f"Processing item: {item.item}")
+            # if the item is not in the current inventory of the NPC:
             if item not in self.inventory_items:
                 payload = {
                     "item": item.change_amount,
@@ -226,8 +250,10 @@ Instructions:
                 payload_lut = {
                     item.item: self.inventory_items_desc[item.item]
                 }
+                logger.debug(f"Adding {item.item}")
+                logger.debug(f"Payload: {payload}")
+                logger.debug(f"Character: {item.subject}")
                 self.sql_memory.add_inventory_items(item.subject, payload, payload_lut)
-                continue
 
             # If item.item is in new_inventory_items, then it was a brand-new item, and we have updated it above
             if item.item not in new_inventory_items:
@@ -236,8 +262,28 @@ Instructions:
                     "character": item.subject,
                     "count_change": item.change_amount
                 }
+                logger.debug(f"Updating with payload: {payload}")
                 self.sql_memory.update_inventory_item(payload)
 
+                # remove item from inventory of the player
+                logger.debug(f"Checking if {item.item} count needs to be decreased for someone else")
+                character2subtract_item = ""
+                if self.__is_human_player(item.source):
+                    logger.debug(f"Item belonged to the human player")
+                    character2subtract_item = "human"
+                elif item.source in self.other_npc_names:
+                    logger.debug(f"Item belonged to {item.source}")
+                    character2subtract_item = item.source
+                logger.debug(f"Shall decrease for: \"{character2subtract_item}\"")
+                if character2subtract_item != "":
+                    logger.debug(f"Decreasing count of {item.item} by {item.change_amount}")
+                    payload = {
+                        "item": item.item,
+                        "character": character2subtract_item,
+                        "count_change": -item.change_amount
+                    }
+                    logger.debug(f"Payload: {payload}")
+                    self.sql_memory.update_inventory_item(payload)
 
     def update_state(self, response):
         payload = {
