@@ -245,7 +245,7 @@ Instructions:
             # if the item is not in the current inventory of the NPC:
             if item not in self.inventory_items:
                 payload = {
-                    "item": item.change_amount,
+                    item.item: item.change_amount,
                 }
                 payload_lut = {
                     item.item: self.inventory_items_desc[item.item]
@@ -254,9 +254,11 @@ Instructions:
                 logger.debug(f"Payload: {payload}")
                 logger.debug(f"Character: {item.subject}")
                 self.sql_memory.add_inventory_items(item.subject, payload, payload_lut)
+                self.inventory_items.append(item.item)
 
             # If item.item is in new_inventory_items, then it was a brand-new item, and we have updated it above
-            if item.item not in new_inventory_items:
+            # Also, we do not want double update
+            if item.item not in new_inventory_items and item.item not in self.inventory_items:
                 payload = {
                     "item": item.item,
                     "character": item.subject,
@@ -265,25 +267,25 @@ Instructions:
                 logger.debug(f"Updating with payload: {payload}")
                 self.sql_memory.update_inventory_item(payload)
 
-                # remove item from inventory of the player
-                logger.debug(f"Checking if {item.item} count needs to be decreased for someone else")
-                character2subtract_item = ""
-                if self.__is_human_player(item.source):
-                    logger.debug(f"Item belonged to the human player")
-                    character2subtract_item = "human"
-                elif item.source in self.other_npc_names:
-                    logger.debug(f"Item belonged to {item.source}")
-                    character2subtract_item = item.source
-                logger.debug(f"Shall decrease for: \"{character2subtract_item}\"")
-                if character2subtract_item != "":
-                    logger.debug(f"Decreasing count of {item.item} by {item.change_amount}")
-                    payload = {
-                        "item": item.item,
-                        "character": character2subtract_item,
-                        "count_change": -item.change_amount
-                    }
-                    logger.debug(f"Payload: {payload}")
-                    self.sql_memory.update_inventory_item(payload)
+            # remove item from inventory of the player if applicable
+            logger.debug(f"Checking if {item.item} count needs to be decreased for someone else")
+            character2subtract_item = ""
+            if self.__is_human_player(item.source):
+                logger.debug(f"Item belonged to the human player")
+                character2subtract_item = "human"
+            elif item.source in self.other_npc_names:
+                logger.debug(f"Item belonged to {item.source}")
+                character2subtract_item = item.source
+            logger.debug(f"Shall decrease for: \"{character2subtract_item}\"")
+            if character2subtract_item != "":
+                logger.debug(f"Decreasing count of {item.item} by {item.change_amount}")
+                payload = {
+                    "item": item.item,
+                    "character": character2subtract_item,
+                    "count_change": -item.change_amount
+                }
+                logger.debug(f"Payload: {payload}")
+                self.sql_memory.update_inventory_item(payload)
 
     def update_state(self, response):
         payload = {
