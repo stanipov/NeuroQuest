@@ -6,8 +6,8 @@ from typing import Optional, List, Dict
 
 
 # ------------------------------- Validate and classify player's response -------------------------------
-_fld_reason_desc = """"Explain decision, 1-2 words. Pick from [lore, other, game]"""
-_fld_val_reason_desc = "Explain your decision and list all identified violations (3 words for each max) if valid == False, empty if valid == True"
+_fld_reason_desc = """"If non-game action, classify. Pick from [lore, other]"""
+_fld_val_reason_desc = "Explain decision, list all identified violations (3 words max) if valid == False, empty if valid == True"
 
 _pick_actions = ['inventory change',
                  'mental state change',
@@ -28,6 +28,7 @@ class ValidReason(BaseModel):
 class ValidateClassifyAction(BaseModel):
     """Validator response model"""
     is_game_action: bool =  Field(validation_alias='is_game_action', description="True/False")
+    non_game_action: str = Field(validation_alias="non_game_action", description=_fld_reason_desc)
     valid: bool = Field(validation_alias='valid', description="Valid game action? True or False")
     valid_reason: List[ValidReason] = Field(description=_fld_val_reason_desc, default=[])
     action_type: list[ActionTypes] = Field(description='List of actions', default=[])

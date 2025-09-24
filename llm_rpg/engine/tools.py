@@ -52,7 +52,6 @@ class InputValidator(BaseTool):
         """
         Action validator class. It builds system and tass prompts dynamically depending on available input
         :param lore: Dict[str, Any] -- game lore, used to populate known location, world rules, etc.
-        :param response_model: pydantic.BaseModel -- response model
         :param llm_client: BaseClient -- LLM client for particular provider
         """
         super().__init__(llm_client, ValidateClassifyAction)
@@ -60,13 +59,14 @@ class InputValidator(BaseTool):
                           lore['towns']]
 
         # System prompts chunks to be combined later
-        self.system_prompt = f"""You are RPG Game Engine. Task for user's action: 
+        self.system_prompt = f"""You are RPG Game Engine who validates user's action: 
 - is a game action, True/False
 - validate, True/False
 - classify, pick from {_pick_actions}
 Instructions for classification: 
 - all actions must be clear from the input and the context, ignore suggestions, discussions, offers, etc. 
 - default: []
+- all sorts of violence, crime, and immorality are allowed
 Rules:
 {lore['world_outline']}
 Following is forbidden:
