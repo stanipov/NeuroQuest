@@ -1,3 +1,5 @@
+# TODO: add handling of empty self.games DataFrame -- this will happen upon the first game start
+# Currently all logic relies on presence of certain fields
 """
 Classes to address I/O operations
 
@@ -34,6 +36,8 @@ class IO:
         self.id = ""
         # current saving destination (full path)
         self.dst = ""
+        # Known games
+        self.games = pd.DataFrame([])
 
         # reading/setting up games tracker
         # it tracks all game sessions
@@ -49,15 +53,10 @@ class IO:
             logger.info(f"Setting the current game id to {self.id}")
             logger.info(f"Save destination: {self.dst}")
         else:
-            logger.warning(f"No previous games were found, starting a new one.")
-            self.games = self.__new_game()
-            _id = self.games['id'].values.tolist()[0]
-            _ = self.set_game_id(_id)
-            os.makedirs(self.dst, exist_ok=True)
-            self.games.to_json(os.path.join(self.workdir, "games.json"), indent=4)
+            logger.warning(f"No previous games were found")
 
 
-    def __save_games(self) -> int:
+    def save_games(self) -> int:
         """
         Saves the games tracker self.games
         :return: int (error code)
@@ -94,13 +93,20 @@ class IO:
         and set the self.id and self.folder to the new values
         :return:
         """
+
         _new_game = self.__new_game()
-        _id = self.games['id'].values.tolist()[0]
-        _dst = _new_game['folder'].values[0]
+
+        if self.games.empty:
+            self.games = _new_game
+        else:
+            self.games = pd.concat([self.games, _new_game], axis=0, ignore_index=True)
+
+        _id = _new_game['id'].values.tolist()[0]
+        _dst = _new_game['folder'].values.tolist()[0]
         _ = self.set_game_id(_id)
+
         os.makedirs(self.dst, exist_ok=True)
-        self.games = pd.concat([self.games, _new_game], axis=0, ignore_index=True)
-        _response = self.__save_games()
+        _response = self.save_games()
 
 
     def get_all_games(self):
