@@ -76,7 +76,7 @@ class NewGameMenu(Menu):
             'world_type': 'dark',
             'kingdoms': 3,
             'towns_per_kingdom': 3,
-            'companions': 2
+            'companions': 1
         }
 
     def display(self) -> Dict[str, Any]:
