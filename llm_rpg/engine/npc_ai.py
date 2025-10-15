@@ -97,7 +97,7 @@ Instructions:
 - actions MUST agree with the world rules
 - you help the human player
 - you behave strictly in accordance to your behavioral rules
-- can use only items in her inventory
+- can use only items in your inventory
 - if you decide to change your inventory, provide inventory changes with items and counts"""
 
 
