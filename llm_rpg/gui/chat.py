@@ -14,7 +14,11 @@ logger = logging.getLogger(__name__)
 
 class RPGChatInterface:
     """Main RPG chat interface with proper threading for streaming"""
-
+    # WIP
+    # hooks for user input processing are intended to call a "game driving" class methods
+    # user_input_processing_commands -->    1) ai_response --> final step for streaming the final response
+    #                                       2) process_input --> user input processing
+    # post_processing_commands --> 1) exit -- all necessary actions to make upon existing the game
     def __init__(self, console_manager: ConsoleManager):
         self.console = console_manager.console
         self.styles = console_manager.styles
@@ -32,7 +36,8 @@ class RPGChatInterface:
         self.post_processing_commands = []
         self.post_processing_hooks = {}
 
-        self.__hook_stacks = set('service', 'user_input', 'post_processing')
+        self.__hook_stacks = set(['service', 'user_input', 'post_processing'])
+        self.__exit_kws = set(["--exit", "--quit", "!q:"])
 
         # Streaming state
         self.streaming_active = False
@@ -111,14 +116,14 @@ class RPGChatInterface:
         """Run response generation in background thread"""
         try:
             # TODO: replace with a proper response generator from the processing hook
-            for chunk in generate_response(processed_input):
+            for chunk in self.user_input_processing_hooks['ai_response'](processed_input):
                 self.response_queue.put(chunk)
             self.response_queue.put(None)  # Signal completion
         except Exception as e:
             self.response_queue.put(("error", str(e)))
 
-    def _display_streaming_response(self, processed_input: str):
-        """Display response stream with proper threading"""
+    def _display_streaming_response(self, processed_input: str, title: str = "GAME") -> str:
+        """Display response stream with proper threading and customizable title"""
         # Start response generation in background
         thread = threading.Thread(
             target=self._generate_response_in_thread,
@@ -145,7 +150,7 @@ class RPGChatInterface:
                     full_response.append(item)
                     panel = Panel(
                         Text("".join(full_response), style=self.styles.get_style("llm_output")),
-                        title="GAME",
+                        title=title,
                         border_style=self.styles.get_style("rpg_npc"),
                         subtitle_align="right"
                     )
@@ -157,11 +162,52 @@ class RPGChatInterface:
         thread.join()
         return "".join(full_response)
 
-    def _process_user_message(self, user_input: str):
-        """Full processing pipeline for user messages"""
-        # TODO add proper handling of user input
-        processed_input = process_input_placeholder(user_input)
-        return self._display_streaming_response(processed_input)
+
+    def _display_static_response(self, response_data: dict) -> str:
+        """Display a pre-generated static response with custom title"""
+        response_text = response_data["response"]
+        title = response_data.get("title", "GAME")
+
+        panel = Panel(
+            Text(response_text, style=self.styles.get_style("llm_output")),
+            title=title,
+            border_style=self.styles.get_style("rpg_npc"),
+            subtitle_align="right"
+        )
+        self.console.print(panel)
+        return response_text
+
+
+    def _process_user_message(self, user_input: str) -> Tuple[Any, str]:
+        """Process user message and return result with display type"""
+        if self.user_input_processing_hooks != {}:
+            processed_result = self.user_input_processing_hooks['process_input'](user_input)
+        else:
+            processed_result = ""
+
+        # Determine display type and return both result and type
+        if isinstance(processed_result, dict) and "response" in processed_result:
+            return processed_result, "static"
+        else:
+            return processed_result, "streaming"
+
+
+    def _handle_user_message(self, user_input: str) -> str:
+        """Orchestrate the complete flow for handling user messages"""
+        # Process the message
+        processed_result, display_type = self._process_user_message(user_input)
+
+        # Display based on type
+        if display_type == "static":
+            return self._display_static_response(processed_result)
+        else:  # streaming
+            return self._display_streaming_response(processed_result)
+
+
+    def _is_game_quit(self, message) -> bool:
+        if message.lower() in self.__exit_kws:
+            return True
+        return False
 
     def start(self):
         """Main chat loop"""
@@ -176,15 +222,16 @@ class RPGChatInterface:
                     Text("You: ", style=self.styles.get_style("rpg_player"))
                 ).strip()
 
-                if user_input.lower() in ("--exit", "--quit", "!q:"):
+                if self._is_game_quit(user_input):
                     self.running = False
+                    self.post_processing_hooks['exit']()
                     break
 
                 if self._is_service_command(user_input):
                     self._process_service_command(user_input)
                 else:
-                    # capture the game response
-                    game_response = self._process_user_message(user_input)
+                    # Process and display the game response
+                    game_response = self._handle_user_message(user_input)
 
         except KeyboardInterrupt:
             self.running = False
@@ -211,7 +258,7 @@ def process_input_placeholder(user_input: str) -> str:
     return f"{user_input}{random.choice(processing_phrases)}"
 
 
-def generate_response(processed_input: str):
+def placeholder_generate_response(processed_input: str):
     """Enhanced RPG response generator with dramatic pacing"""
     # Initial delay before responding
     time.sleep(1.2)
