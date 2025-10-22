@@ -1,6 +1,8 @@
 import threading
-from typing import Optional, Callable, Any, List, Tuple
+from typing import Optional, Callable, Any, List, Tuple, Dict
 from queue import Queue, Empty
+from enum import Enum
+from pydantic import BaseModel, Field
 from rich.live import Live
 from rich.panel import Panel
 from rich.text import Text
@@ -10,15 +12,42 @@ from llm_rpg.clients.dummy_llm import DummyLLM
 from llm_rpg.gui.console_manager import ConsoleManager
 
 import logging
+
 logger = logging.getLogger(__name__)
+
+
+class MessageStatus(str, Enum):
+    SUCCESS = "success"
+    FAILED = "failed"
+
+
+class InputProcessingStatus(str, Enum):
+    DONE = "done"
+    CONTINUE = "continue"
+
+
+class HookResponse(BaseModel):
+    """Model for hook response data"""
+    message: str = Field(default="")
+    role: str = Field(default="GAME")
+    message_status: MessageStatus = Field(default=MessageStatus.SUCCESS)
+    input_processing_status: InputProcessingStatus = Field(default=InputProcessingStatus.CONTINUE)
+
+
+class DisplayType(str, Enum):
+    STATIC = "static"
+    STREAMING = "streaming"
+
+
+class StaticResponseData(BaseModel):
+    """Model for static response data"""
+    response: str
+    title: str = "GAME"
+
 
 class RPGChatInterface:
     """Main RPG chat interface with proper threading for streaming"""
-    # WIP
-    # hooks for user input processing are intended to call a "game driving" class methods
-    # user_input_processing_commands -->    1) ai_response --> final step for streaming the final response
-    #                                       2) process_input --> user input processing
-    # post_processing_commands --> 1) exit -- all necessary actions to make upon existing the game
+
     def __init__(self, console_manager: ConsoleManager):
         self.console = console_manager.console
         self.styles = console_manager.styles
@@ -36,8 +65,8 @@ class RPGChatInterface:
         self.post_processing_commands = []
         self.post_processing_hooks = {}
 
-        self.__hook_stacks = set(['service', 'user_input', 'post_processing'])
-        self.__exit_kws = set(["--exit", "--quit", "!q:"])
+        self.__hook_stacks = {'service', 'user_input', 'post_processing'}
+        self.__exit_kws = {"--exit", "--quit", "!q:"}
 
         # Streaming state
         self.streaming_active = False
@@ -84,21 +113,19 @@ class RPGChatInterface:
         """
         Base method to register command hooks
 
-        :param stack: 
-        :param command:
-        :param handler:
-        :return:
+        :param stack: hook stack type ('service', 'user_input', 'post_processing')
+        :param command: command string
+        :param handler: handler function
         """
-        #  set('service', 'user_input', 'post_processing')
         if stack not in self.__hook_stacks:
             logger.error(f"Hook stack not recognised. Got {stack}, expected: {self.__hook_stacks}")
             raise ValueError(f"Hook stack not recognised. Got {stack}, expected: {self.__hook_stacks}")
 
         if stack.lower() == 'service':
             self.__register_service_command(command, handler)
-        if stack.lower() == "user_input" or stack.lower() == "user":
+        elif stack.lower() in {"user_input", "user"}:
             self.__register_input_processing_command(command, handler)
-        if stack.lower() == "post_processing" or stack.lower() == 'post':
+        elif stack.lower() in {"post_processing", "post"}:
             self.__register_post_processing_command(command, handler)
 
     def _show_typing_indicator(self) -> Live:
@@ -112,22 +139,21 @@ class RPGChatInterface:
             console=self.console
         )
 
-    def _generate_response_in_thread(self, processed_input: str):
+    def _generate_response_in_thread(self, responses: List[HookResponse]):
         """Run response generation in background thread"""
         try:
-            # TODO: replace with a proper response generator from the processing hook
-            for chunk in self.user_input_processing_hooks['ai_response'](processed_input):
+            for chunk in self.user_input_processing_hooks['ai_response'](responses):
                 self.response_queue.put(chunk)
             self.response_queue.put(None)  # Signal completion
         except Exception as e:
             self.response_queue.put(("error", str(e)))
 
-    def _display_streaming_response(self, processed_input: str, title: str = "GAME") -> str:
+    def _display_streaming_response(self, responses: List[HookResponse], title: str = "GAME") -> str:
         """Display response stream with proper threading and customizable title"""
         # Start response generation in background
         thread = threading.Thread(
             target=self._generate_response_in_thread,
-            args=(processed_input,),
+            args=(responses,),
             daemon=True
         )
         thread.start()
@@ -144,7 +170,6 @@ class RPGChatInterface:
                         self.console.print(
                             Text(f"Error: {item[1]}", style=self.styles.get_style("error"))
                         )
-                        # TODO: add necessary operations on exit
                         break
 
                     full_response.append(item)
@@ -162,35 +187,73 @@ class RPGChatInterface:
         thread.join()
         return "".join(full_response)
 
-
-    def _display_static_response(self, response_data: dict) -> str:
+    def _display_static_response(self, response_data: StaticResponseData) -> str:
         """Display a pre-generated static response with custom title"""
-        response_text = response_data["response"]
-        title = response_data.get("title", "GAME")
-
         panel = Panel(
-            Text(response_text, style=self.styles.get_style("llm_output")),
-            title=title,
+            Text(response_data.response, style=self.styles.get_style("llm_output")),
+            title=response_data.title,
             border_style=self.styles.get_style("rpg_npc"),
             subtitle_align="right"
         )
         self.console.print(panel)
-        return response_text
+        return response_data.response
 
+    def _display_hook_response(self, hook_response: HookResponse) -> None:
+        """Display a single hook response message"""
+        if hook_response.message:
+            style = (self.styles.get_style("success")
+                     if hook_response.message_status == MessageStatus.SUCCESS
+                     else self.styles.get_style("error"))
 
-    def _process_user_message(self, user_input: str) -> Tuple[Any, str]:
+            panel = Panel(
+                Text(hook_response.message, style=style),
+                title=hook_response.role,
+                border_style=self.styles.get_style("rpg_npc"),
+                subtitle_align="right"
+            )
+            self.console.print(panel)
+
+    def _process_user_input_until_done(self, user_input: str) -> List[HookResponse]:
+        """Process user input until input_processing_status is 'done'"""
+        responses = []
+
+        while True:
+            if not self.user_input_processing_hooks:
+                # Fallback if no hooks registered
+                responses.append(HookResponse(
+                    message="No input processing hooks registered",
+                    role="SYSTEM",
+                    message_status=MessageStatus.FAILED,
+                    input_processing_status=InputProcessingStatus.DONE
+                ))
+                break
+
+            hook_response_dict = self.user_input_processing_hooks['process_input'](user_input)
+            hook_response = HookResponse(**hook_response_dict)
+            responses.append(hook_response)
+
+            # Display the message if not empty
+            if hook_response.message:
+                self._display_hook_response(hook_response)
+
+            # Check if processing is complete
+            if hook_response.input_processing_status == InputProcessingStatus.DONE:
+                break
+
+        return responses
+
+    def _process_user_message(self, user_input: str) -> Tuple[Any, DisplayType]:
         """Process user message and return result with display type"""
-        if self.user_input_processing_hooks != {}:
-            processed_result = self.user_input_processing_hooks['process_input'](user_input)
-        else:
-            processed_result = ""
+        responses = self._process_user_input_until_done(user_input)
 
-        # Determine display type and return both result and type
-        if isinstance(processed_result, dict) and "response" in processed_result:
-            return processed_result, "static"
+        # After input processing is done, get the final AI response
+        if self.user_input_processing_hooks and 'ai_response' in self.user_input_processing_hooks:
+            return responses, DisplayType.STREAMING
         else:
-            return processed_result, "streaming"
-
+            # Fallback static response if no ai_response hook
+            final_message = responses[-1].message if responses else "No response generated"
+            static_response = StaticResponseData(response=final_message)
+            return static_response, DisplayType.STATIC
 
     def _handle_user_message(self, user_input: str) -> str:
         """Orchestrate the complete flow for handling user messages"""
@@ -198,16 +261,14 @@ class RPGChatInterface:
         processed_result, display_type = self._process_user_message(user_input)
 
         # Display based on type
-        if display_type == "static":
+        if display_type == DisplayType.STATIC:
             return self._display_static_response(processed_result)
         else:  # streaming
             return self._display_streaming_response(processed_result)
 
-
-    def _is_game_quit(self, message) -> bool:
-        if message.lower() in self.__exit_kws:
-            return True
-        return False
+    def _is_game_quit(self, message: str) -> bool:
+        """Check if the message is a quit command"""
+        return message.lower() in self.__exit_kws
 
     def start(self):
         """Main chat loop"""
@@ -224,7 +285,8 @@ class RPGChatInterface:
 
                 if self._is_game_quit(user_input):
                     self.running = False
-                    self.post_processing_hooks['exit']()
+                    if 'exit' in self.post_processing_hooks:
+                        self.post_processing_hooks['exit']()
                     break
 
                 if self._is_service_command(user_input):
