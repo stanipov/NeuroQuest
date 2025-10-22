@@ -3,6 +3,9 @@ import os
 from typing import Dict, Any, Optional
 
 import logging
+
+from llm_rpg.clients.llm_factory import LLMFactory
+
 logger = logging.getLogger(__name__)
 
 class ConfigManager:
@@ -89,3 +92,28 @@ def save_config(config: Dict[str, Any], config_path: str):
     os.makedirs(os.path.dirname(config_path), exist_ok=True)
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
+
+
+def setup_llms(config_manager: ConfigManager) -> Dict[str, Any]:
+    """Setup LLM clients based on configuration"""
+    llm_clients = {}
+
+    llm_types = ['lore_llm', 'npc_ai_llm', 'game_ai_llm']
+
+    for llm_type in llm_types:
+        llm_config = config_manager.get_llm_config(llm_type)
+        llm_clients[llm_type] = LLMFactory.create_llm_client(llm_config)
+        logging.info(f"Created {llm_type} client: {llm_config.get('provider')}")
+
+    return llm_clients
+
+
+def get_lore_generation_params(config_manager: ConfigManager, user_params: Dict[str, Any]) -> Dict[str, Any]:
+    """Combine configuration and user parameters for lore generation"""
+    lore_config = config_manager.get_lore_config()
+
+    # Merge user parameters with configuration (user params take precedence)
+    combined_params = lore_config.copy()
+    combined_params.update(user_params)
+
+    return combined_params

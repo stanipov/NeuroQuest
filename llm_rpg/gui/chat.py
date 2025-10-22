@@ -1,5 +1,5 @@
 import threading
-from typing import Optional, Callable, Any, List, Tuple, Dict
+from typing import Callable, Any, List, Tuple
 from queue import Queue, Empty
 from enum import Enum
 from pydantic import BaseModel, Field
@@ -8,7 +8,6 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.spinner import Spinner
 from rich.console import Group
-from llm_rpg.clients.dummy_llm import DummyLLM
 from llm_rpg.gui.console_manager import ConsoleManager
 
 import logging
@@ -66,7 +65,7 @@ class RPGChatInterface:
         self.post_processing_hooks = {}
 
         self.__hook_stacks = {'service', 'user_input', 'post_processing'}
-        self.__exit_kws = {"--exit", "--quit", "!q:"}
+        self.__exit_kws = {"--exit", "--quit", ":q!"}
 
         # Streaming state
         self.streaming_active = False
@@ -286,7 +285,7 @@ class RPGChatInterface:
                 if self._is_game_quit(user_input):
                     self.running = False
                     if 'exit' in self.post_processing_hooks:
-                        self.post_processing_hooks['exit']()
+                        self.post_processing_hooks['exit'](user_input)
                     break
 
                 if self._is_service_command(user_input):
@@ -299,63 +298,3 @@ class RPGChatInterface:
             self.running = False
         finally:
             self.console.print("Chat session ended.", style=self.styles.get_style("system"))
-
-
-# External processing functions
-# ------ Mock-up simulations ------
-import time, random
-def process_input_placeholder(user_input: str) -> str:
-    """Enhanced input processing with thinking emulation"""
-    # Emulate parsing and understanding
-    time.sleep(0.4)  # Processing delay
-
-    # Add RPG-style processing effects
-    processing_phrases = [
-        f"\n*The mage studies your words carefully*",
-        f"\n*Ancient runes glow as your message is analyzed*",
-        f"\n*The spirit guide nods slowly*"
-    ]
-
-    # Return enriched input with processing flavor
-    return f"{user_input}{random.choice(processing_phrases)}"
-
-
-def placeholder_generate_response(processed_input: str):
-    """Enhanced RPG response generator with dramatic pacing"""
-    # Initial delay before responding
-    time.sleep(1.2)
-
-    # Stage 1: Acknowledgment
-    yield f"\n*adjusts robes* Your words about '{processed_input.split()[0]}'..."
-    time.sleep(0.01)
-
-    # Stage 2: Dramatic build-up
-    dramatic_pauses = [
-        "\n*casts divination spell*",
-        "\n*consults ancient tome*",
-        "\n*gazes into crystal ball*"
-    ]
-    yield random.choice(dramatic_pauses)
-    time.sleep(0.15)
-
-    # Stage 3: Revelation
-    revelations = [
-        "\nThe spirits reveal...",
-        "\nThe stars align to show...",
-        "\nMy magical senses perceive..."
-    ]
-    yield random.choice(revelations)
-    time.sleep(0.8)
-
-    # Stage 4: Actual response
-    response_body = [
-        "\nYou must seek the lost artifact in the Caves of Despair!",
-        "\nBeware! The dark lord's minions are watching you...",
-        "\nI foresee a great battle in your near future!",
-        "\nThe answer lies eastward, beyond the Mountains of Madness."
-    ]
-    yield random.choice(response_body)
-    time.sleep(0.5)
-
-    # Final prompt
-    yield "\n\n*leans forward* What will you do next, adventurer?"
