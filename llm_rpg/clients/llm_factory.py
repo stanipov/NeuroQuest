@@ -27,8 +27,7 @@ class LLMFactory:
         provider = llm_config.get('provider', '').lower()
         model = llm_config.get('model', '')
         api_key_env = llm_config.get('api_key_env', '')
-        temperature = llm_config.get('temperature', 0.7)
-        max_tokens = llm_config.get('max_tokens', 2000)
+        props = llm_config.get("props", {})
 
         # Get API key from environment
         api_key = os.environ.get(api_key_env, '')
@@ -40,13 +39,13 @@ class LLMFactory:
         try:
             if provider == 'deepseek':
                 # Use OpenAI-compatible interface for DeepSeek
-                return DeepSeekW_OAI(model, api_key, temperature=temperature, max_tokens=max_tokens)
+                return DeepSeekW_OAI(model, api_key, **props)
 
             elif provider == 'groq':
-                return GroqW(model, api_key, temperature=temperature, max_tokens=max_tokens)
+                return GroqW(model, api_key,**props)
 
             elif provider == 'ollama':
-                return OllamaW(model, temperature=temperature, max_tokens=max_tokens)
+                return OllamaW(model, **props)
 
             elif provider == 'dummy':
                 return DummyLLM()
