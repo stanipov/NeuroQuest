@@ -30,8 +30,8 @@ class ValidateClassifyAction(BaseModel):
     is_game_action: bool =  Field(validation_alias='is_game_action', description="True/False")
     non_game_action: str = Field(validation_alias="non_game_action", description=_fld_reason_desc)
     valid: bool = Field(validation_alias='valid', description="Valid game action? True or False")
-    valid_reason: List[ValidReason] = Field(description=_fld_val_reason_desc, default=[])
-    action_type: list[ActionTypes] = Field(description='List of actions', default=[])
+    valid_reason: List[ValidReason] = Field(description=_fld_val_reason_desc, default_factory=list)
+    action_type: list[ActionTypes] = Field(description='List of actions', default_factory=list)
 
 # ------------------------------- Description of inventory item -------------------------------
 class InventoryItemDescription(BaseModel):
