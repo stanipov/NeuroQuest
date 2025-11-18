@@ -1,7 +1,7 @@
 import random
 import time
 from typing import Dict, List
-
+import string
 from llm_rpg.gui.chat import HookResponse
 
 
@@ -70,3 +70,12 @@ def ai_response_mock(responses: List[HookResponse]):
 
     # Final prompt
     yield "\n\n*leans forward* What will you do next, adventurer?"
+
+
+def random_alphanum_str(N=20):
+    return ''.join(random.SystemRandom().choices(string.ascii_uppercase + string.digits, k=N))
+
+def random_float(N, M):
+    return float( ''.join(random.SystemRandom().choices(string.digits, k=N)) +
+                  '.' +
+                  ''.join(random.SystemRandom().choices(string.digits, k=M)) )
