@@ -47,7 +47,7 @@ class NPC(BaseTool):
 
         # hooks for generation of additional context via, e.g. RAG or knowledge graphs, etc.
         # expected entry point: TODO
-        self.extra_context_hooks = {}
+        self.extra_context_hooks = None
 
         # Defaults and statics
         self.base_system_prompt = self.__base_sys_prt()
@@ -120,15 +120,15 @@ Instructions:
         current_turn = conversation_hist[0]
         TASK = f"""What will you do?
 
-    Situation: {current_turn['ai_response']}
+Situation: {current_turn['ai_response']}
 
-    Human actions: {current_turn['human_response']}"""
+Human actions: {current_turn['human_response']}"""
         for npc_char in self.other_npc_names:
             if current_turn[npc_char]:
                 TASK += f"\n{npc_char}: {current_turn[npc_char]}"
         if  conv_context != "":
             TASK += f"""{self.__fmt_header_lines} Your previous conversation: {self.__fmt_header_lines}
-    {conv_context}"""
+{conv_context}"""
 
         additional_context = self.get_extra_context()
         if additional_context != "":
