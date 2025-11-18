@@ -506,6 +506,13 @@ class SQLGameMemory(SQLMemory):
         }
         self.players_state_tbl_pk = ["player"]
 
+        # ----------- Non-game responses -----------
+        self.game_knowledge_tbl_name = "knowledge"
+        self.game_knowledge_tbl_schema = {"turn": int,
+                                          "ai_response": str,
+                                          "human_question": str}
+        self.game_knowledge_tbl_pk = ["turn"]
+
         if self.inventory_tbl_name not in self.models:
             logger.info(f"Creating the \"{self.inventory_tbl_name}\" table")
             self.create_table(table_name=self.inventory_tbl_name,
@@ -540,6 +547,12 @@ class SQLGameMemory(SQLMemory):
             self.create_table(table_name=self.players_state_tbl_name,
                               columns=self.players_state_tbl_schema,
                               primary_keys=self.players_state_tbl_pk)
+
+        if self.game_knowledge_tbl_name not in self.models:
+            logger.info(f"Creating the \"{self.game_knowledge_tbl_name}\" table")
+            self.create_table(table_name=self.game_knowledge_tbl_name,
+                              columns=self.game_knowledge_tbl_schema,
+                              primary_keys=self.game_knowledge_tbl_pk)
 
 
     def add_inventory_items(self, character: str,
