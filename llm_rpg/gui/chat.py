@@ -139,7 +139,7 @@ class RPGChatInterface:
         )
 
     def _generate_response_in_thread(self, responses: List[HookResponse]):
-        """Run response generation in background thread"""
+        """Run response generation in background thread. This is the final game response"""
         try:
             for chunk in self.user_input_processing_hooks['ai_response'](responses):
                 self.response_queue.put(chunk)
@@ -260,9 +260,11 @@ class RPGChatInterface:
         processed_result, display_type = self._process_user_message(user_input)
 
         # Display based on type
+        # NPC and other non-final response actions are always static for arch issues
         if display_type == DisplayType.STATIC:
             return self._display_static_response(processed_result)
-        else:  # streaming
+        else:
+            # this will be the final response -- the actual gam action
             return self._display_streaming_response(processed_result)
 
     def _is_game_quit(self, message: str) -> bool:
