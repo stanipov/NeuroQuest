@@ -51,16 +51,18 @@ if __name__ == "__main__":
     lore_llm = llm_clients['lore_llm']
     npc_ai_llm = llm_clients['npc_ai_llm']
     game_ai_llm = llm_clients['game_ai_llm']
+    input_validator_llm = llm_clients.get('input_validator', None)
 
     # ----- Get LLM-specific parameters -----
-    lore_llm_kw = {
-        "temperature": config_manager.get_llm_config('lore_llm').get('temperature', 1.0)
-    }
-    npc_llm_kw = {
-        "temperature": config_manager.get_llm_config('npc_ai_llm').get('temperature', 0.5)
-    }
-    game_ai_llm_kw = {
-        "temperature": config_manager.get_llm_config('game_ai_llm').get('temperature', 0.5)
+    lore_llm_kw = config_manager.get_llm_config('lore_llm').get("props", None)
+    npc_llm_kw = config_manager.get_llm_config('npc_ai_llm').get("props", None)
+    game_ai_llm_kw = config_manager.get_llm_config('game_ai_llm').get("props", None)
+    input_validator_kw = config_manager.get_llm_config('input_validator').get("props", None)
+    llms_kwargs = {
+        "lore_llm": lore_llm_kw,
+        "npc_ai_llm": npc_llm_kw,
+        "game_ai_llm": game_ai_llm_kw,
+        "input_validator": input_validator_kw
     }
 
     # ----- Game IO ----
@@ -75,8 +77,6 @@ if __name__ == "__main__":
         main_menu = GameMenu(console_manager, game_io)
         result = main_menu.main_menu()
         game_lore = {}
-
-
 
         if result['new_game']:
             logger.info(f"Generating new game")
