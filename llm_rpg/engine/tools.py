@@ -59,9 +59,9 @@ class InputValidator(BaseTool):
                           lore['towns']]
 
         # System prompts chunks to be combined later
-        self.system_prompt = f"""You are RPG Game Engine who validates user's action: 
+        self.system_prompt = f"""You are RPG Game Engine. You validate user's input: 
 - is a game action, True/False
-- validate, True/False
+- valid action, True/False
 - classify, pick from {_pick_actions}
 Instructions for classification: 
 - all actions must be clear from the input and the context, ignore suggestions, discussions, offers, etc. 
