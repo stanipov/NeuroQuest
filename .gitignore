@@ -9,6 +9,7 @@ tests/
 test_folder/
 test_*/
 game/
+configs/
 
 
 # Byte-compiled / optimized / DLL files
