@@ -27,11 +27,11 @@ class ValidReason(BaseModel):
 
 class ValidateClassifyAction(BaseModel):
     """Validator response model"""
-    is_game_action: bool =  Field(validation_alias='is_game_action', description="True/False")
-    non_game_action: str = Field(validation_alias="non_game_action", description=_fld_reason_desc)
-    valid: bool = Field(validation_alias='valid', description="Valid game action? True or False")
+    is_game_action: bool =  Field(validation_alias='is_game_action', description="True/False", default=True)
+    non_game_action: str = Field(validation_alias="non_game_action", description=_fld_reason_desc, default="")
+    valid: bool = Field(validation_alias='valid', description="Valid game action? True or False", default=True)
     valid_reason: List[ValidReason] = Field(description=_fld_val_reason_desc, default_factory=list)
-    action_type: list[ActionTypes] = Field(description='List of actions', default_factory=list)
+    action_type: list[ActionTypes] = Field(description='List of game actions if is_game_action==True', default_factory=list)
 
 # ------------------------------- Description of inventory item -------------------------------
 class InventoryItemDescription(BaseModel):
