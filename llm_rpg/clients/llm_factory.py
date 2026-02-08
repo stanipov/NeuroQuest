@@ -6,6 +6,7 @@ from llm_rpg.clients.ollama import OllamaW
 from llm_rpg.clients.deepseek import DeepSeekW_OAI
 from llm_rpg.clients.groq import GroqW
 from llm_rpg.clients.dummy_llm import DummyLLM
+from llm_rpg.clients.llamacpp import LocalLLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -29,23 +30,32 @@ class LLMFactory:
         api_key_env = llm_config.get('api_key_env', '')
         props = llm_config.get("props", {})
 
-        # Get API key from environment
-        api_key = os.environ.get(api_key_env, '')
+        # For providers that don't require API key (local LLMs), set default placeholder
+        if not os.environ.get(api_key_env, '') and provider in ['llamacpp', 'ollama']:
+            api_key = 'not-needed'
 
-        if not api_key and provider not in ['ollama', 'dummy']:
+        if not api_key and provider not in ['llamacpp', 'ollama', 'dummy']:
             logger.warning(f"No API key found for {provider}. Using DummyLLM instead.")
             return DummyLLM()
 
         try:
             if provider == 'deepseek':
                 # Use OpenAI-compatible interface for DeepSeek
+                api_key = os.environ.get(api_key_env, '')
                 return DeepSeekW_OAI(model, api_key, **props)
 
             elif provider == 'groq':
-                return GroqW(model, api_key,**props)
+                api_key = os.environ.get(api_key_env, '')
+                return GroqW(model, api_key, **props)
+
+            elif provider == 'llamacpp':
+                # Use OpenAI-compatible interface for llama.cpp server
+                base_url = llm_config.get('base_url', 'http://localhost:9000/v1')
+                return LocalLLMClient(model, base_url=base_url, api_key=api_key, **props)
 
             elif provider == 'ollama':
-                return OllamaW(model, **props)
+                base_url = llm_config.get('base_url', 'http://localhost:11434')
+                return OllamaW(model, host=base_url, **props)
 
             elif provider == 'dummy':
                 return DummyLLM()
