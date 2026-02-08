@@ -37,10 +37,14 @@ class ObjectDescriptor:
 
     def describe(self, obj: str, **kwargs) -> Dict[str, str]:
         msgs = gen_obj_est_msgs(obj)
-        response = self.client.struct_output(msgs, self.response_model, **kwargs)
-        self.stats[obj] = response['stats']
-        result = response['message'].model_dump()
-        result['name'] = result['name'].title()
+        try:
+            response = self.client.struct_output(msgs, self.response_model, **kwargs)
+            self.stats[obj] = response['stats']
+            result = response['message'].model_dump()
+            result['name'] = result['name'].title()
+        except Exception as e:
+            logger.warning(f"{obj}: {e}")
+            result = InventoryItemDescription()
         return result
 
 
