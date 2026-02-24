@@ -20,7 +20,7 @@ from llm_rpg.utils.config import ConfigManager, setup_llms, get_lore_generation_
 from llm_rpg.utils.logger import set_logger
 
 # ----- Some testing flags -----
-TEST_CHAT_UI = True
+TEST_CHAT_UI = False
 
 if __name__ == "__main__":
     # ----- Configuration Setup -----
@@ -117,7 +117,75 @@ if __name__ == "__main__":
 
             game_lore, memory = init_memory_lore(game_lore_raw, memory_db_path, True)
 
-        console_manager.console.print(game_lore)
+        # Display World Description
+        #console_manager.console.print(f"\n{'='*10} World Description {'='*10}")
+        console_manager.display_lore_section(
+            title=f"Your world: {game_lore['world']['name']}",
+            content=game_lore['world']['description']
+        )
+
+        # Display World Rules
+        #console_manager.console.print(f"\n{'='*10} World Rules {'='*10}")
+        console_manager.display_lore_section(
+            title="Rules",
+            content=game_lore.get('world_outline', 'No rules defined')
+        )
+
+        # Display Starting Point
+        #console_manager.console.print(f"\n{'='*10} Starting Point {'='*10}")
+        console_manager.display_lore_section(
+            title="Entry Point",
+            content=game_lore.get('start', 'No starting point defined')
+        )
+
+        # Display Human Player's Character Card (Charter Winning Conditions)
+        #console_manager.console.print(f"\n{'='*10} Your Charter (Winning Conditions) {'='*10}")
+        if 'human_player' in game_lore:
+            console_manager.display_character_card(
+                title="Your Player",
+                character_data=game_lore['human_player']
+            )
+        else:
+            console_manager.display_lore_section(
+                title="Your Player",
+                content="No character data available"
+            )
+
+        # Display NPC Companion(s)
+        #console_manager.console.print(f"\n{'='*10} Your NPC Companion{'='*10}")
+        if 'npc' in game_lore:
+            for npc_name, npc_data in game_lore['npc'].items():
+                console_manager.display_character_card(
+                    title=f"Companion: {npc_name}",
+                    character_data=npc_data
+                )
+        else:
+            console_manager.display_lore_section(
+                title="Companion",
+                content="No NPC companion assigned"
+            )
+
+        # Display NPC's Goal
+        #console_manager.console.print(f"\n{'='*10} NPC Companion's Winning Conditions {'='*10}")
+        if 'npc' in game_lore:
+            for npc_name, npc_data in game_lore['npc'].items():
+                console_manager.display_lore_section(
+                    title=f"{npc_name}'s Goal",
+                    content=npc_data.get('goal', 'No goal defined')
+                )
+
+        # Display Antagonist
+        #console_manager.console.print(f"\n{'='*10} Your Antagonist {'='*10}")
+        if 'antagonist' in game_lore:
+            console_manager.display_character_card(
+                title="Your Antagonist",
+                character_data=game_lore['antagonist']
+            )
+        else:
+            console_manager.display_lore_section(
+                title="Antagonist",
+                content="No antagonist defined"
+            )
 
     if TEST_CHAT_UI:
 
