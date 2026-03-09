@@ -16,7 +16,7 @@ def user_input_process_mock(user_input: str) -> Dict[str, str]:
         f"\n*Ancient runes glow as your message is analyzed*",
         f"\n*The spirit guide nods slowly*"
     ]
-    roles = ['user', 'Ctulhu', 'Aragorn', 'Sauron']
+    roles = ['user', 'Cthulhu', 'Aragorn', 'Sauron']
     input_processing_status = ['done','continue']
 
     # Return enriched input with processing flavor
@@ -74,6 +74,7 @@ def ai_response_mock(responses: List[HookResponse]):
 
 def random_alphanum_str(N=20):
     return ''.join(random.SystemRandom().choices(string.ascii_uppercase + string.digits, k=N))
+
 
 def random_float(N, M):
     return float( ''.join(random.SystemRandom().choices(string.digits, k=N)) +

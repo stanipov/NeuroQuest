@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Union
 from pydantic import BaseModel
 import json
+import re
 
 
 class BaseClient(ABC):
@@ -31,7 +32,25 @@ class BaseClient(ABC):
         """Adds another system prompt to enforce JSON output"""
         return [{
             "role": "system",
-            "content": f"""You MUST output a JSON object that strictly follows this schema: {json.dumps(response_model.model_json_schema())}"""}]
+            "content": f"""You MUST output a valid JSON without any markdown formatting, code blocks, or additional \
+text that strictly follows this schema: {json.dumps(response_model.model_json_schema())}"""}]
+
+    def extract_json_from_markdown(self, text: str) -> str:
+        """
+        Extract JSON from markdown code blocks if present.
+        
+        This helper method handles cases where LLMs wrap their JSON responses
+        in markdown code blocks (```json ... ``` or ``` ... ```).
+        
+        :param text: The raw response text that may contain markdown code blocks
+        :return: Clean JSON string without markdown wrappers
+        """
+        # Match ```json ... ``` or ``` ... ```
+        pattern = r'```(?:json)?\s*({.*?})\s*```'
+        match = re.search(pattern, text, re.DOTALL)
+        if match:
+            return match.group(1)
+        return text  # Return original if no code block found
 
     @abstractmethod
     def chat(self, messages: List[Dict[Any, Any]], *arg, **kwargs) -> Dict[str, Any]:

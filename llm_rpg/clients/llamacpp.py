@@ -5,10 +5,18 @@ from openai import OpenAI
 from llm_rpg.templates.base_client import BaseClient
 import json
 
+
 class LocalLLMClient(BaseClient):
     """Wrapper for a local LLM server compatible with the OpenAI API (e.g., llama.cpp server)."""
 
-    def __init__(self, model_name: str = None, base_url: str = "http://localhost:8000/v1", api_key: str = "not-needed", *args, **kwargs):
+    def __init__(
+        self,
+        model_name: str = None,
+        base_url: str = "http://localhost:8000/v1",
+        api_key: str = "not-needed",
+        *args,
+        **kwargs,
+    ):
         """
         Initializes the local LLM client.
 
@@ -20,43 +28,60 @@ class LocalLLMClient(BaseClient):
         self.client = OpenAI(base_url=base_url, api_key=api_key)
 
     def chat(self, messages: List[Dict[Any, Any]], *args, **kwargs) -> Dict[str, Any]:
-        response = self.client.chat.completions.create(model=self.model_name, messages=messages, **kwargs)
+        response = self.client.chat.completions.create(
+            model=self.model_name, messages=messages, **kwargs
+        )
 
-        result = {
+        return {
             "message": response.choices[0].message.content,
             "stats": {
                 "prompt_tokens": response.usage.prompt_tokens,
                 "prompt_eval_duration": getattr(response, "prompt_eval_duration", None),
                 "eval_tokens": response.usage.completion_tokens,
-                "eval_duration": getattr(response, "eval_duration", None)
-            }
+                "eval_duration": getattr(response, "eval_duration", None),
+            },
         }
-        return result
 
-    def struct_output(self, messages: List[Dict[Any, Any]], response_model: BaseModel, **kwargs) -> Any:
-        system_message = []
+    def struct_output(
+        self, messages: List[Dict[Any, Any]], response_model: BaseModel, **kwargs
+    ) -> Any:
+        struct_system = []
         try:
-            system_message = self.enforce_struct_output(response_model)
+            struct_system = self.enforce_struct_output(response_model)
         except Exception as e:
-            system_message = []
+            pass
 
-        response = self.client.chat.completions.create(model=self.model_name,
-                                                       messages=system_message+messages,
-                                                       **kwargs)
-        structured = response_model.parse_raw(response.choices[0].message.content)
+        # Check if messages already start with a system message
+        if messages and messages[0].get("role") == "system":
+            # Merge struct system content into existing system message
+            if struct_system:
+                messages[0]["content"] += "\n\n" + struct_system[0]["content"]
+            final_messages = messages
+        else:
+            # Prepend struct system to messages
+            final_messages = struct_system + messages
+
+        response = self.client.chat.completions.create(
+            model=self.model_name, messages=final_messages, **kwargs
+        )
+        raw_content = response.choices[0].message.content
+        clean_json = self.extract_json_from_markdown(raw_content)
+        structured = response_model.parse_raw(clean_json)
         result = {
             "message": structured,
             "stats": {
                 "prompt_tokens": response.usage.prompt_tokens,
                 "prompt_eval_duration": getattr(response, "prompt_eval_duration", None),
                 "eval_tokens": response.usage.completion_tokens,
-                "eval_duration": getattr(response, "eval_duration", None)
-            }
+                "eval_duration": getattr(response, "eval_duration", None),
+            },
         }
         return result
 
     def stream(self, messages: List[Dict[Any, Any]], **kwargs) -> Any:
-        stream = self.client.chat.completions.create(model=self.model_name,messages=messages,stream=True,**kwargs)
+        stream = self.client.chat.completions.create(
+            model=self.model_name, messages=messages, stream=True, **kwargs
+        )
         for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta["content"]
@@ -65,23 +90,28 @@ class LocalLLMClient(BaseClient):
 class LocalLLMClientR(BaseClient):
     """Wrapper for a local LLM server compatible with the OpenAI API (e.g., llama.cpp server)."""
 
-    def __init__(self, model_name: str = None, base_url: str = "http://localhost:8000/v1", api_key: str = "not-needed", *args, **kwargs):
+    def __init__(
+        self,
+        model_name: str = None,
+        base_url: str = "http://localhost:8000/v1",
+        api_key: str = "not-needed",
+        *args,
+        **kwargs,
+    ):
         super().__init__(model_name, *args, **kwargs)
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key  # usually not needed locally
 
         self.headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
+            "Authorization": f"Bearer {self.api_key}",
         }
 
     def chat(self, messages: List[Dict[Any, Any]], **kwargs) -> Dict[str, Any]:
-        payload = {
-            "model": self.model_name,
-            "messages": messages,
-            **kwargs
-        }
-        resp = requests.post(f"{self.base_url}/chat/completions", headers=self.headers, json=payload)
+        payload = {"model": self.model_name, "messages": messages, **kwargs}
+        resp = requests.post(
+            f"{self.base_url}/chat/completions", headers=self.headers, json=payload
+        )
         resp.raise_for_status()
         response = resp.json()
 
@@ -92,21 +122,23 @@ class LocalLLMClientR(BaseClient):
                 "prompt_eval_duration": response.get("prompt_eval_duration"),
                 "eval_tokens": response.get("usage", {}).get("completion_tokens"),
                 "eval_duration": response.get("eval_duration"),
-            }
+            },
         }
         return result
 
-    def struct_output(self, messages: List[Dict[Any, Any]], response_model: BaseModel, **kwargs) -> Any:
-        payload = {
-            "model": self.model_name,
-            "messages": messages,
-            **kwargs
-        }
-        resp = requests.post(f"{self.base_url}/chat/completions", headers=self.headers, json=payload)
+    def struct_output(
+        self, messages: List[Dict[Any, Any]], response_model: BaseModel, **kwargs
+    ) -> Any:
+        payload = {"model": self.model_name, "messages": messages, **kwargs}
+        resp = requests.post(
+            f"{self.base_url}/chat/completions", headers=self.headers, json=payload
+        )
         resp.raise_for_status()
         response = resp.json()
 
-        structured = response_model.parse_raw(response["choices"][0]["message"]["content"])
+        raw_content = response["choices"][0]["message"]["content"]
+        clean_json = self.extract_json_from_markdown(raw_content)
+        structured = response_model.parse_raw(clean_json)
         result = {
             "message": structured,
             "stats": {
@@ -114,7 +146,7 @@ class LocalLLMClientR(BaseClient):
                 "prompt_eval_duration": response.get("prompt_eval_duration"),
                 "eval_tokens": response.get("usage", {}).get("completion_tokens"),
                 "eval_duration": response.get("eval_duration"),
-            }
+            },
         }
         return result
 
@@ -123,15 +155,20 @@ class LocalLLMClientR(BaseClient):
             "model": self.model_name,
             "messages": messages,
             "stream": True,
-            **kwargs
+            **kwargs,
         }
-        with requests.post(f"{self.base_url}/chat/completions", headers=self.headers, json=payload, stream=True) as resp:
+        with requests.post(
+            f"{self.base_url}/chat/completions",
+            headers=self.headers,
+            json=payload,
+            stream=True,
+        ) as resp:
             resp.raise_for_status()
             for line in resp.iter_lines():
                 if not line:
                     continue
                 if line.startswith(b"data: "):
-                    chunk = line[len(b"data: "):]
+                    chunk = line[len(b"data: ") :]
                     if chunk == b"[DONE]":
                         break
                     data = json.loads(chunk.decode("utf-8"))

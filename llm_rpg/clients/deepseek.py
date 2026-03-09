@@ -175,9 +175,13 @@ class DeepSeekW_requests(BaseClient):
 
         response = self._make_request("chat/completions", payload)
 
+        # Extract JSON from markdown if present
+        raw_content = response["choices"][0]["message"]["content"]
+        clean_json_str = self.extract_json_from_markdown(raw_content)
+        
         # Parse the JSON content
         try:
-            json_content = json.loads(response["choices"][0]["message"]["content"])
+            json_content = json.loads(clean_json_str)
             structured_message = pydantic_model(**json_content)
         except (json.JSONDecodeError, pydantic.ValidationError) as e:
             raise ValidationError(f"Failed to parse or validate structured output: {str(e)}")
@@ -331,9 +335,13 @@ class DeepSeekW_OAI(BaseClient):
             **kwargs
         )
 
+        # Extract JSON from markdown if present
+        raw_content = response.choices[0].message.content
+        clean_json_str = self.extract_json_from_markdown(raw_content)
+        
         # Parse the JSON content
         try:
-            json_content = json.loads(response.choices[0].message.content)
+            json_content = json.loads(clean_json_str)
             structured_message = pydantic_model(**json_content)
         except (json.JSONDecodeError, pydantic.ValidationError) as e:
             raise ValueError(f"Failed to parse or validate structured output: {str(e)}")

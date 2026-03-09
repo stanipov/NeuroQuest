@@ -25,11 +25,13 @@ class ConsoleStyles:
             'user_input': Style(color="bright_cyan", bold=True),
             'llm_output': Style(color="bright_green"),
             'system': Style(color="bright_yellow", italic=True),
-            'service_command': Style(color="bright_magenta", underline=True),
             'typing': Style(color="grey58", italic=True),
             'rpg_npc': Style(color="bright_blue", bold=True),
             'rpg_player': Style(color="bright_cyan", bold=True),
             'rpg_system': Style(color="bright_yellow", italic=True),
+            'game_stream': Style(color="spring_green1", bold=True),
+            'game_stream_panel': Style(color="bright_yellow"),
+            'service_command': Style(color="bright_magenta", underline=True),
         }
 
     def _setup_theme(self) -> Theme:

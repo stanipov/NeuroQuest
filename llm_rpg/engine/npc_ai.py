@@ -80,10 +80,10 @@ class NPC(BaseTool):
         return f"""You are {self.name}. These are your brief biography details:
 {self.npc_card}
 
-You act following her rules:
+You act following your behavioral rules:
 {self.npc_rules}
 
-You live in a world that follows these behavioral rules:
+You live in a world that follows these rules:
 {self.world_rules}
 
 Here's your world:
@@ -94,7 +94,7 @@ You will be provided with actions of other characters.
 
 Your task: respond to these as {self.name}
 Instructions:
-- actions MUST agree with the world rules
+- actions MUST follow the world rules
 - you help the human player
 - you behave strictly in accordance to your behavioral rules
 - can use only items in your inventory
@@ -225,7 +225,7 @@ Human actions: {current_turn['human_response']}"""
             logger.info(f"Found new items to describe: {new_inventory_items.keys()}")
             for item in new_inventory_items:
                 logger.info(f"Describing new item: \"{item}\"")
-                new_inventory_items[item]['description'] = self.inv_items_descriptor(item, temperature=self.__inv_desc_T)
+                new_inventory_items[item]['description'] = self.inv_items_descriptor.describe(item, temperature=self.__inv_desc_T)
                 self.inventory_items_desc.update( {item.item: new_inventory_items[item]['description']} )
 
         # add the new items

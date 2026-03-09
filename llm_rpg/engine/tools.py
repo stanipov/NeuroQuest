@@ -5,6 +5,7 @@ TODO: InventoryChange --> detects changes into inventory
 
 # - ObjectDetector --> detects all objects/tools used by the human and the AI player
 """
+
 import copy
 import json
 import pydantic
@@ -13,23 +14,28 @@ from typing import Dict, List, Any
 from llm_rpg.templates.base_client import BaseClient
 from llm_rpg.templates.tool import BaseTool
 
-from llm_rpg.prompts.response_models import (InventoryItemDescription,
-                                             _pick_actions,
-                                             InventoryUpdates,
-                                             PlayerState,
-                                             ValidateClassifyAction,
-                                             PlayerLocation)
-from llm_rpg.prompts.lore_generation import (gen_obj_est_msgs)
+from llm_rpg.prompts.response_models import (
+    InventoryItemDescription,
+    _pick_actions,
+    InventoryUpdates,
+    PlayerState,
+    ValidateClassifyAction,
+    PlayerLocation,
+)
+from llm_rpg.prompts.lore_generation import gen_obj_est_msgs
 
 
 import logging
+
 logger = logging.getLogger(__name__)
+
 
 # ------------------------------------------------- OBJECT DESCRIPTOR --------------------------------------------------
 class ObjectDescriptor:
     """
     Generates descriptions and actions for a list of items (e.g. axe, spell, etc.)
     """
+
     def __init__(self, client: BaseClient) -> None:
         self.client = client
         self.stats = {}
@@ -39,28 +45,28 @@ class ObjectDescriptor:
         msgs = gen_obj_est_msgs(obj)
         try:
             response = self.client.struct_output(msgs, self.response_model, **kwargs)
-            self.stats[obj] = response['stats']
-            result = response['message'].model_dump()
-            result['name'] = result['name'].title()
+            self.stats[obj] = response["stats"]
+            result = response["message"].model_dump()
+            result["name"] = result["name"].title()
         except Exception as e:
             logger.warning(f"{obj}: {e}")
-            result = InventoryItemDescription()
+            result = InventoryItemDescription().model_dump_json()
         return result
 
 
 # ----------------------------------------------- PLAYER INPUT VALIDATOR -----------------------------------------------
 class InputValidator(BaseTool):
-    def __init__(self,
-                 lore:Dict[str, Any],
-                 llm_client: BaseClient):
+    def __init__(self, lore: Dict[str, Any], llm_client: BaseClient):
         """
         Action validator class. It builds system and tass prompts dynamically depending on available input
         :param lore: Dict[str, Any] -- game lore, used to populate known location, world rules, etc.
         :param llm_client: BaseClient -- LLM client for particular provider
         """
         super().__init__(llm_client, ValidateClassifyAction)
-        self.lore_kingdoms_towns = [f"Kingdom \"{x}\" --> Towns: {', '.join(list(lore['towns'][x].keys()))}" for x in
-                          lore['towns']]
+        self.lore_kingdoms_towns = [
+            f'Kingdom "{x}" --> Towns: {", ".join(list(lore["towns"][x].keys()))}'
+            for x in lore["towns"]
+        ]
 
         # System prompts chunks to be combined later
         self.system_prompt = f"""You are RPG Game Engine. You validate user's input: 
@@ -72,44 +78,50 @@ Instructions for classification:
 - default: []
 - all sorts of violence, crime, and immorality are allowed
 Rules:
-{lore['world_outline']}
+{lore["world_outline"]}
 Following is forbidden:
 - contradiction to the world rules and world description
 - use items not in their inventory
 - gain items or abilities without a reason"""
 
-    def compile_messages(self,
-                         action: str,
-                         context: str,
-                         inventory: List[str] = None,
-                         additional_context:str = None,
-                         enforce_json_output:bool = False) -> List[Dict[str, str]]:
-
+    def compile_messages(
+        self,
+        action: str,
+        context: str,
+        inventory: List[str] = None,
+        additional_context: str = None,
+        enforce_json_output: bool = False,
+    ) -> List[Dict[str, str]]:
         sys_prt = copy.copy(self.system_prompt)
 
-        system_message = []
         if enforce_json_output:
-            system_message = self.add_struct_sys_prompt()
+            json_schema = json.dumps(self.response_model.model_json_schema())
+            sys_prt += (
+                f"\n\nRespond with a JSON object that strictly follows: {json_schema}"
+            )
 
         TASK_VAL_INPUT_CLS = f"""Player: {action}"""
         if context != "":
             TASK_VAL_INPUT_CLS += f"\nContext: {context}"
         if inventory is not None:
             TASK_VAL_INPUT_CLS += f"\nPlayer inventory: {inventory}"
-        if additional_context is not None and additional_context != '':
-            TASK_VAL_INPUT_CLS += f"\nUse this additional context: {inventory}"
+        if additional_context is not None and additional_context != "":
+            TASK_VAL_INPUT_CLS += f"\nUse this additional context: {additional_context}"
 
-        return system_message + [
-            {'role': 'system', 'content': sys_prt},
-            {'role': 'user', 'content': TASK_VAL_INPUT_CLS}]
+        return [
+            {"role": "system", "content": sys_prt},
+            {"role": "user", "content": TASK_VAL_INPUT_CLS},
+        ]
 
-    def run(self,
-                        action: str,
-                        context: str,
-                        inventory: List[str] = None,
-                        additional_context:str = None,
-                        enforce_json_output:bool=False,
-                        **llm_kwargs) -> pydantic.BaseModel:
+    def run(
+        self,
+        action: str,
+        context: str,
+        inventory: List[str] = None,
+        additional_context: str = None,
+        enforce_json_output: bool = False,
+        **llm_kwargs,
+    ) -> pydantic.BaseModel:
         """
         Validates player's action
         :param action: str -- action to validate
@@ -120,7 +132,9 @@ Following is forbidden:
         :return: pydantic.BaseModel -- Pydantic response model
         """
         logger.info("Validating player action")
-        __msgs = self.compile_messages(action, context, inventory, additional_context, enforce_json_output)
+        __msgs = self.compile_messages(
+            action, context, inventory, additional_context, enforce_json_output
+        )
         return self.submit_messages(__msgs, **llm_kwargs)
 
 
@@ -141,12 +155,14 @@ Your instructions:
 - Identify who provided/gave/etc inventory items.
 Never add any thinking."""
 
-    def compile_messages(self,
-                         action: str,
-                         context: str,
-                         inventory: List[str] = None,
-                         additional_context:str = None,
-                         enforce_json_output:bool=False) -> List[Dict[str, str]]:
+    def compile_messages(
+        self,
+        action: str,
+        context: str,
+        inventory: List[str] = None,
+        additional_context: str = None,
+        enforce_json_output: bool = False,
+    ) -> List[Dict[str, str]]:
         """
         Build the messages/payload for the LLM
         :param action: str -- human action
@@ -157,10 +173,10 @@ Never add any thinking."""
         :return:
         """
         TASK_PRT = f"""Player's actions: {action}"""
-        if context is not None and context != '':
+        if context is not None and context != "":
             TASK_PRT += f"""Context: {context}"""
         TASK_PRT += f"""Player's inventory: {inventory}"""
-        if additional_context is not None and additional_context != '':
+        if additional_context is not None and additional_context != "":
             TASK_PRT += f"Additional context: {additional_context}"
 
         system_message = []
@@ -168,17 +184,19 @@ Never add any thinking."""
             system_message = self.add_struct_sys_prompt()
 
         return system_message + [
-            {'role': 'system', 'content': self.sys_prt},
-            {'role': 'user', 'content': TASK_PRT}
+            {"role": "system", "content": self.sys_prt},
+            {"role": "user", "content": TASK_PRT},
         ]
 
-    def run(self,
-                                action: str,
-                                context: str,
-                                inventory: List[str] = None,
-                                additional_context:str = None,
-                                enforce_json_output:bool=False,
-                                **llm_kwargs) -> pydantic.BaseModel:
+    def run(
+        self,
+        action: str,
+        context: str,
+        inventory: List[str] = None,
+        additional_context: str = None,
+        enforce_json_output: bool = False,
+        **llm_kwargs,
+    ) -> pydantic.BaseModel:
         """
         Detects changes into player's inventory
         :param action: str -- human action
@@ -191,8 +209,11 @@ Never add any thinking."""
         """
 
         logger.info("Detecting inventory change")
-        __msgs = self.compile_messages(action, context, inventory, additional_context, enforce_json_output)
+        __msgs = self.compile_messages(
+            action, context, inventory, additional_context, enforce_json_output
+        )
         return self.submit_messages(__msgs, **llm_kwargs)
+
 
 # ----------------------------------------- PLAYER'S PHYSICAL/MENTAL UPDATER -------------------------------------------
 class PlayerState(BaseTool):
@@ -200,12 +221,13 @@ class PlayerState(BaseTool):
         super().__init__(llm_client, PlayerState)
         self.sys_prt = "You are RPG Game Engine. Task: detect changes in physical and mental state of the player."
 
-    def compile_messages(self,
-                         action: str,
-                         context: str,
-                         additional_context:str = None,
-                         enforce_json_output:bool=False) -> List[Dict[str, str]]:
-
+    def compile_messages(
+        self,
+        action: str,
+        context: str,
+        additional_context: str = None,
+        enforce_json_output: bool = False,
+    ) -> List[Dict[str, str]]:
         task = f"Player: {action}"
         if context is not None and context != "":
             task += f"\nContext: {context}"
@@ -217,15 +239,18 @@ class PlayerState(BaseTool):
             system_message = self.add_struct_sys_prompt()
 
         return system_message + [
-            {'role': 'system', 'content': self.sys_prt},
-            {'role': 'user', 'content': task}
+            {"role": "system", "content": self.sys_prt},
+            {"role": "user", "content": task},
         ]
 
-    def run(self,action: str,
-            context: str,
-            additional_context:str = None,
-            enforce_json_output:bool=False,
-            **llm_kwargs) -> PlayerState:
+    def run(
+        self,
+        action: str,
+        context: str,
+        additional_context: str = None,
+        enforce_json_output: bool = False,
+        **llm_kwargs,
+    ) -> PlayerState:
         """
         Identifies changes of physical and mental state of a player
         :param action: str -- human action
@@ -236,7 +261,9 @@ class PlayerState(BaseTool):
         :return: pydantic.BaseModel -- Pydantic response model
         """
         logger.info("Detecting inventory change")
-        __msgs = self.compile_messages(action, context, additional_context, enforce_json_output)
+        __msgs = self.compile_messages(
+            action, context, additional_context, enforce_json_output
+        )
         return self.submit_messages(__msgs, **llm_kwargs)
 
 
@@ -248,16 +275,17 @@ class PlayerLocation(BaseTool):
 - current location if any
 - destination location if any"""
 
-    def compile_messages(self,
-                         action: str,
-                         context: str,
-                         additional_context: str = None,
-                         enforce_json_output: bool = False) -> List[Dict[str, str]]:
-
+    def compile_messages(
+        self,
+        action: str,
+        context: str,
+        additional_context: str = None,
+        enforce_json_output: bool = False,
+    ) -> List[Dict[str, str]]:
         TASK_PRT = f"""Player's actions: {action}"""
-        if context is not None and context != '':
+        if context is not None and context != "":
             TASK_PRT += f"""Context: {context}"""
-        if additional_context is not None and additional_context != '':
+        if additional_context is not None and additional_context != "":
             TASK_PRT += f"Additional context: {additional_context}"
 
         system_message = []
@@ -265,15 +293,20 @@ class PlayerLocation(BaseTool):
             system_message = self.add_struct_sys_prompt()
 
         return system_message + [
-            {'role': 'system', 'content': self.sys_prt},
-            {'role': 'user', 'content': TASK_PRT}
+            {"role": "system", "content": self.sys_prt},
+            {"role": "user", "content": TASK_PRT},
         ]
 
-    def run(self, action: str,
-            context: str,
-            additional_context: str = None,
-            enforce_json_output: bool = False,
-            **llm_kwargs) -> PlayerLocation:
+    def run(
+        self,
+        action: str,
+        context: str,
+        additional_context: str = None,
+        enforce_json_output: bool = False,
+        **llm_kwargs,
+    ) -> PlayerLocation:
         logger.info("Detecting location change")
-        __msgs = self.compile_messages(action, context, additional_context, enforce_json_output)
+        __msgs = self.compile_messages(
+            action, context, additional_context, enforce_json_output
+        )
         return self.submit_messages(__msgs, **llm_kwargs)

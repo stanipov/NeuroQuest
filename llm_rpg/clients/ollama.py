@@ -7,11 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 import json
 
-def clean_json(x: str) -> str:
-    x = x.replace('json', '')
-    x = x.replace('```', '')
-    x = x.replace('`', '')
-    return x.strip()
+# Use the base class method instead of this local function
 
 class OllamaW(BaseClient):
     def __init__(self, model_name,
@@ -129,7 +125,8 @@ class OllamaW(BaseClient):
         msg = raw_response.message.content
 
         try:
-            msg_s = pydantic_model.model_validate_json( clean_json(msg) )
+            clean_json_str = self.extract_json_from_markdown(msg)
+            msg_s = pydantic_model.model_validate_json(clean_json_str)
         except Exception as e:
             logger.warning(f"Could not parse the response to the Pydantic model, returning None. Error: {e}")
             msg_s = None

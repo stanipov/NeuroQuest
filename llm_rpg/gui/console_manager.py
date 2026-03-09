@@ -4,6 +4,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.style import Style
 from rich.text import Text
+from rich.table import Table
 import os
 
 from llm_rpg.gui.styles import ConsoleStyles
@@ -18,12 +19,14 @@ class ConsoleManager():
         self._styles = ConsoleStyles()  # Using the new styles class
         self._console = self.create_console()
 
+
     def setup_terminal_environment(self) -> None:
         """Ensure basic terminal environment variables"""
         if 'TERM' not in os.environ:
             os.environ['TERM'] = 'xterm-256color'
         if 'COLORTERM' not in os.environ:
             os.environ['COLORTERM'] = 'truecolor'
+
 
     def create_console(self) -> Console:
         """Create console with fallback options"""
@@ -32,6 +35,7 @@ class ConsoleManager():
         except Exception:
             return Console(theme=self._styles.basic_theme, force_terminal=True)
 
+
     def clear_screen(self) -> None:
         """Clear the terminal screen"""
         try:
@@ -39,6 +43,7 @@ class ConsoleManager():
         except Exception:
             # Alternative cross-platform solution:
             os.system('cls' if os.name == 'nt' else 'clear')
+
 
     def display_header(self, title: str) -> None:
         """Display a styled header with the given title"""
@@ -50,16 +55,19 @@ class ConsoleManager():
             justify="center"
         )
 
+
     def get_style(self, style_name: str) -> Style:
         """Convenience method to get a style by name"""
         return self._styles.get_style(style_name)
+
 
     @property
     def console(self) -> Console:
         """The rich Console instance"""
         return self._console
 
-    def display_lore_section(self, title: str, content: str, style_name: str = "rpg_npc") -> None:
+
+    def display_text_in_panel(self, title: str, content: str, style_name: str = "rpg_npc") -> None:
         """Display a lore section in a styled panel"""
         panel = Panel(
             Text(content, style=self.get_style("llm_output")),
@@ -69,9 +77,9 @@ class ConsoleManager():
         )
         self.console.print(panel)
 
+
     def display_character_card(self, title: str, character_data: Dict[str, str], style_name: str = "rpg_npc") -> None:
-        """Display a character card with fixed-width field labels and bold text in a panel"""
-        from rich.table import Table
+        """Display a character card with fixed-width field labels and bold text in a panel"""        
         
         # Capitalize field names for display
         def format_label(key: str) -> str:
@@ -103,22 +111,23 @@ class ConsoleManager():
         )
         self.console.print(panel)
 
+
     def display_all_lore(self, game_lore: Dict[str, any]) -> None:
         """Display all game lore information using console_manager"""
         # Display World Description
-        self.display_lore_section(
+        self.display_text_in_panel(
             title=f"Your world: {game_lore['world']['name']}",
             content=game_lore['world']['description']
         )
 
         # Display World Rules
-        self.display_lore_section(
+        self.display_text_in_panel(
             title="Rules",
             content=game_lore.get('world_outline', 'No rules defined')
         )
 
         # Display Starting Point
-        self.display_lore_section(
+        self.display_text_in_panel(
             title="Entry Point",
             content=game_lore.get('start', 'No starting point defined')
         )
@@ -130,7 +139,7 @@ class ConsoleManager():
                 character_data=game_lore['human_player']
             )
         else:
-            self.display_lore_section(
+            self.display_text_in_panel(
                 title="Your Player",
                 content="No character data available"
             )
@@ -143,7 +152,7 @@ class ConsoleManager():
                     character_data=npc_data
                 )
         else:
-            self.display_lore_section(
+            self.display_text_in_panel(
                 title="Companion",
                 content="No NPC companion assigned"
             )
@@ -155,10 +164,11 @@ class ConsoleManager():
                 character_data=game_lore['antagonist']
             )
         else:
-            self.display_lore_section(
+            self.display_text_in_panel(
                 title="Antagonist",
                 content="No antagonist defined"
             )
+
 
     @property
     def styles(self) -> Dict[str, Style]:

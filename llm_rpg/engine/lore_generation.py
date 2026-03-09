@@ -285,6 +285,7 @@ class LoreGeneratorGvt:
             logger.error(f"Inventory items must be str or list, got {type(items)}")
         else:
             for item in inv_items:
+                logger.info(f"Describing {item}")
                 _t = self.ObjDesc.describe(item, temperature=temperature)
                 ans[_t['name']] = _t
                 sleep(self.api_delay)

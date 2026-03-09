@@ -167,7 +167,7 @@ Instructions:
 - describe how these mechanics interact with each other.
 - invent races and species which inhabitate the world.
 - describe how these species and races interact with each other.
-- respond only with a list of rules/outlines of 3-5 words each."""
+- respond only with a list of rules/outlines of 1 sentence (10 words max)."""
 
 
 # A system prompt to describe objects based on instructions

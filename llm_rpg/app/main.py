@@ -4,6 +4,7 @@ import sys
 from datetime import datetime
 from dotenv import load_dotenv
 import logging
+
 sys.path.append(os.getcwd())
 
 from llm_rpg.utils.path_utils import setup_paths
@@ -19,8 +20,24 @@ from llm_rpg.app.set_memory import init_memory_lore
 from llm_rpg.utils.config import ConfigManager, setup_llms, get_lore_generation_params
 from llm_rpg.utils.logger import set_logger
 
+from llm_rpg.gui.chat2 import ChatInterface as ChatInterface2
+
+from llm_rpg.engine.game_ai import GameAI
+
 # ----- Some testing flags -----
-TEST_CHAT_UI = False
+TEST_MAIN_MENU = False
+TEST_GAME_AI = True
+TEST_CHAT2 = False
+TEST_CHAT1 = False
+
+
+from enum import Enum
+
+
+class InputProcessingStatus(str, Enum):
+    DONE = "done"
+    CONTINUE = "continue"
+
 
 if __name__ == "__main__":
     # ----- Configuration Setup -----
@@ -29,9 +46,11 @@ if __name__ == "__main__":
 
     # ----- Setup Paths -----
     path_config = setup_paths(config_manager)
-    cwd = path_config.get('game_folder', os.path.join(os.getcwd(), "game"))
-    log_folder = path_config.get('log_folder', os.path.join(cwd, "logs"))
-    game_folder = path_config.get('saved_games_folder', os.path.join(cwd, "saved_games"))
+    cwd = path_config.get("game_folder", os.path.join(os.getcwd(), "game"))
+    log_folder = path_config.get("log_folder", os.path.join(cwd, "logs"))
+    game_folder = path_config.get(
+        "saved_games_folder", os.path.join(cwd, "saved_games")
+    )
 
     # ----- Current date -----
     dt_now = datetime.now().strftime("%Y-%m-%d")
@@ -42,27 +61,31 @@ if __name__ == "__main__":
     logger.info(f"{'-' * 10} Starting new game /{dt_now}/ {'-' * 10}")
 
     # ----- Load environment variables -----
-    dotenv_path = config_manager.config.get('dotenv_path', '/ext4/proj/2025/gen-ai_game/.env')
+    dotenv_path = config_manager.config.get(
+        "dotenv_path", "/ext4/proj/2025/gen-ai_game/.env"
+    )
     load_dotenv(dotenv_path=dotenv_path)
     logger.info(f"Loaded dotenv file from {dotenv_path}")
 
     # ----- Setup LLMs -----
     llm_clients = setup_llms(config_manager)
-    lore_llm = llm_clients['lore_llm']
-    npc_ai_llm = llm_clients['npc_ai_llm']
-    game_ai_llm = llm_clients['game_ai_llm']
-    input_validator_llm = llm_clients.get('input_validator', None)
+    lore_llm = llm_clients["lore_llm"]
+    npc_ai_llm = llm_clients["npc_ai_llm"]
+    game_ai_llm = llm_clients["game_ai_llm"]
+    input_validator_llm = llm_clients.get("input_validator", None)
 
     # ----- Get LLM-specific parameters -----
-    lore_llm_kw = config_manager.get_llm_config('lore_llm').get("props", None)
-    npc_llm_kw = config_manager.get_llm_config('npc_ai_llm').get("props", None)
-    game_ai_llm_kw = config_manager.get_llm_config('game_ai_llm').get("props", None)
-    input_validator_kw = config_manager.get_llm_config('input_validator').get("props", None)
+    lore_llm_kw = config_manager.get_llm_config("lore_llm").get("props", None)
+    npc_llm_kw = config_manager.get_llm_config("npc_ai_llm").get("props", None)
+    game_ai_llm_kw = config_manager.get_llm_config("game_ai_llm").get("props", None)
+    input_validator_kw = config_manager.get_llm_config("input_validator").get(
+        "props", None
+    )
     llms_kwargs = {
         "lore_llm": lore_llm_kw,
         "npc_ai_llm": npc_llm_kw,
         "game_ai_llm": game_ai_llm_kw,
-        "input_validator": input_validator_kw
+        "input_validator": input_validator_kw,
     }
 
     # ----- Game IO ----
@@ -71,16 +94,17 @@ if __name__ == "__main__":
     # ----- UI -----
     console_manager = ConsoleManager()
 
-
-    if not TEST_CHAT_UI:
+    if TEST_MAIN_MENU:
         # ----- Main menu -----
         main_menu = GameMenu(console_manager, game_io)
         result = main_menu.main_menu()
         game_lore = {}
 
-        if result['new_game']:
+        if result["new_game"]:
             logger.info(f"Generating new game")
-            console_manager.console.print(f"{'=' * 15} Generating the new game {'=' * 15}")
+            console_manager.console.print(
+                f"{'=' * 15} Generating the new game {'=' * 15}"
+            )
             _ = game_io.add_new_game()
             game_id = game_io.id
             game_folder = game_io.dst
@@ -89,124 +113,123 @@ if __name__ == "__main__":
             logger.info(f"Game memory db will be located at {memory_db_path}")
 
             # Get lore generation parameters from config and user input
-            lore_config = get_lore_generation_params(config_manager, result['new_game_params'])
+            lore_config = get_lore_generation_params(
+                config_manager, result["new_game_params"]
+            )
 
-            game_lore_raw = GenerateLore(lore_llm, lore_config, game_folder, console_manager, **lore_llm_kw)
+            game_lore_raw = GenerateLore(
+                lore_llm, lore_config, game_folder, console_manager, **lore_llm_kw
+            )
 
             # add description to the game
-            cond = game_io.games['id'] == game_id
-            game_io.games.loc[
-                cond, 'description'] = f"{game_lore_raw['world']['name']} -- {game_lore_raw['world']['description']}"
+            cond = game_io.games["id"] == game_id
+            game_io.games.loc[cond, "description"] = (
+                f"{game_lore_raw['world']['name']} -- {game_lore_raw['world']['description']}"
+            )
             game_io.save_games()
 
             # populating the memory
-            enable_memory = config_manager.get_game_config().get('enable_memory', True)
-            game_lore, memory = init_memory_lore(game_lore_raw, memory_db_path, not enable_memory)
+            enable_memory = config_manager.get_game_config().get("enable_memory", True)
+            game_lore, memory = init_memory_lore(
+                game_lore_raw, memory_db_path, not enable_memory
+            )
             console_manager.console.print(f"{'=' * 15} Ready! {'=' * 15}")
 
-        if not result['new_game'] and result['load_game'] >= 0:
+        if not result["new_game"] and result["load_game"] >= 0:
             logger.info(f"Loading the game")
-            row_num = result['load_game']
+            row_num = result["load_game"]
             _row = game_io.games.iloc[row_num]
-            game_id = _row['id']
-            game_folder = _row['folder']
+            game_id = _row["id"]
+            game_folder = _row["folder"]
             memory_db_path = os.path.join(game_folder, "memory.sql")
 
-            with open(os.path.join(game_folder, "lore.json"), 'r') as f:
+            with open(os.path.join(game_folder, "lore.json"), "r") as f:
                 game_lore_raw = json.load(f)
 
             game_lore, memory = init_memory_lore(game_lore_raw, memory_db_path, True)
 
-        # Display World Description
-        #console_manager.console.print(f"\n{'='*10} World Description {'='*10}")
-        console_manager.display_lore_section(
-            title=f"Your world: {game_lore['world']['name']}",
-            content=game_lore['world']['description']
+        # Display all lore information
+        console_manager.display_all_lore(game_lore)
+
+        # set up GameAI
+        game_ai = GameAI(
+            lore=game_lore_raw,
+            llm_registry=llm_clients,
+            memory=memory,
+            config_mgr=config_manager,
+            **llms_kwargs,
         )
 
-        # Display World Rules
-        #console_manager.console.print(f"\n{'='*10} World Rules {'='*10}")
-        console_manager.display_lore_section(
-            title="Rules",
-            content=game_lore.get('world_outline', 'No rules defined')
+    if TEST_GAME_AI:
+        logger.info(f"Loading the game")
+        row_num = 2
+        _row = game_io.games.iloc[row_num]
+        game_id = _row["id"]
+        game_folder = _row["folder"]
+        memory_db_path = os.path.join(game_folder, "memory.sql")
+
+        with open(os.path.join(game_folder, "lore.json"), "r") as f:
+            game_lore_raw = json.load(f)
+
+        game_lore, memory = init_memory_lore(game_lore_raw, memory_db_path, True)
+
+        game_ai = GameAI(
+            lore=game_lore_raw,
+            llm_registry=llm_clients,
+            memory=memory,
+            config_mgr=config_manager,
+            **llms_kwargs,
         )
 
-        # Display Starting Point
-        #console_manager.console.print(f"\n{'='*10} Starting Point {'='*10}")
-        console_manager.display_lore_section(
-            title="Entry Point",
-            content=game_lore.get('start', 'No starting point defined')
-        )
+        # Display all lore information
+        console_manager.display_all_lore(game_lore)
 
-        # Display Human Player's Character Card (Charter Winning Conditions)
-        #console_manager.console.print(f"\n{'='*10} Your Charter (Winning Conditions) {'='*10}")
-        if 'human_player' in game_lore:
-            console_manager.display_character_card(
-                title="Your Player",
-                character_data=game_lore['human_player']
-            )
-        else:
-            console_manager.display_lore_section(
-                title="Your Player",
-                content="No character data available"
-            )
+        # User input loop
+        while True:
+            msg = input("Your input (or 'quit' to exit): ")
 
-        # Display NPC Companion(s)
-        #console_manager.console.print(f"\n{'='*10} Your NPC Companion{'='*10}")
-        if 'npc' in game_lore:
-            for npc_name, npc_data in game_lore['npc'].items():
-                console_manager.display_character_card(
-                    title=f"Companion: {npc_name}",
-                    character_data=npc_data
+            if msg.lower() in ["quit", "exit", "q"]:
+                print("Exiting game AI test...")
+                break
+
+            done = False
+            for ans in game_ai.process_user_input(msg):
+                response = ans.message
+                name = ans.role
+                console_manager.display_text_in_panel(
+                    title=name, content=response, style_name="rpg_npc"
                 )
-        else:
-            console_manager.display_lore_section(
-                title="Companion",
-                content="No NPC companion assigned"
-            )
+                if ans.input_processing_status == InputProcessingStatus.DONE:
+                    done = True
+                    break
 
-        # Display NPC's Goal
-        #console_manager.console.print(f"\n{'='*10} NPC Companion's Winning Conditions {'='*10}")
-        if 'npc' in game_lore:
-            for npc_name, npc_data in game_lore['npc'].items():
-                console_manager.display_lore_section(
-                    title=f"{npc_name}'s Goal",
-                    content=npc_data.get('goal', 'No goal defined')
-                )
+            if done:
+                for char in game_ai.generate_game_action():
+                    console_manager.console.print(char, end = '\r')
 
-        # Display Antagonist
-        #console_manager.console.print(f"\n{'='*10} Your Antagonist {'='*10}")
-        if 'antagonist' in game_lore:
-            console_manager.display_character_card(
-                title="Your Antagonist",
-                character_data=game_lore['antagonist']
-            )
-        else:
-            console_manager.display_lore_section(
-                title="Antagonist",
-                content="No antagonist defined"
-            )
 
-    if TEST_CHAT_UI:
-
+    if TEST_CHAT1:
         # TODO: Continue with chat interface setup...
         chat_interface = RPGChatInterface(console_manager)
-        chat_interface.register_command_hooks(stack="user_input",
-                                              handler=user_input_process_mock,
-                                              command="process_input")
+        chat_interface.register_command_hooks(
+            stack="user_input", handler=user_input_process_mock, command="process_input"
+        )
 
-        chat_interface.register_command_hooks(stack="user_input",
-                                              handler=ai_response_mock,
-                                              command="ai_response")
+        chat_interface.register_command_hooks(
+            stack="user_input", handler=ai_response_mock, command="ai_response"
+        )
 
-        chat_interface.register_command_hooks(stack="post_processing",
-                                              handler=lambda x: x,
-                                              command="exit")
+        chat_interface.register_command_hooks(
+            stack="post_processing", handler=lambda x: x, command="exit"
+        )
 
-
-        #chat_interface.user_input_process_mock = custom_input_processor
-        #chat_interface.generate_response = custom_response_generator
+        # chat_interface.user_input_process_mock = custom_input_processor
+        # chat_interface.generate_response = custom_response_generator
 
         chat_interface.start()
 
-        #console_manager.console.clear()
+        # console_manager.console.clear()
+
+    # if TEST_CHAT2:
+    #    chat_interface = ChatInterface2(console_manager)
+    #    chat_interface.set_game_ai(game_ai)
