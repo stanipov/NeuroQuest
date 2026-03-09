@@ -127,9 +127,17 @@ class ConsoleManager():
         )
 
         # Display Starting Point
+        _box_msgs = []
+        _player_loc = game_lore.get('start_location', {}).get('human', {})
+        if _player_loc == {}:
+            _box_msgs.append("No starting point defined")
+        else:
+            _box_msgs.append(f"Kingdom: {_player_loc.get('kingdom', 'Unknown kingdom')}")
+            _box_msgs.append(f"Town: {_player_loc.get('town', 'Unknown town')}")
+
         self.display_text_in_panel(
             title="Entry Point",
-            content=game_lore.get('start', 'No starting point defined')
+            content="\n".join(_box_msgs)
         )
 
         # Display Human Player's Character Card (Charter Winning Conditions)
