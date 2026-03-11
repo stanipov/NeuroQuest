@@ -29,74 +29,6 @@ TOWNS_DESC_STRUCT = {
 }
 
 
-# Instructions to generate a character
-# If you want to change it, follow these rules:
-# - never add "name" field, it will break internals
-# - "goal" field with the relevant description must be present, as its absence will break internals
-STARTING_FUNDS = (20, 40)
-NUM_INV_ITEMS = 7
-CHAR_DESC_STRUCT = {
-    "gender": "character's gender, pick from: male/female",
-    "occupation": "pick one or two from warrior, researcher, magician, crook, theft, outcast",
-    "age": "pick between 20 to 35",
-    "biography": "a brief biography, 1-2 sentences",
-    "deeper_pains": "describe deeper pains, 1 sentence up to 10 words",
-    "deeper_desires": "describe deeper desires, 1 sentence up to 10 words",
-    "goal": "describe character's goal in the game, 1 sentence up to 10 words. Character's goal must be something epic and significant",
-    "physical": "describe strength (physical power), dexterity (how agile the character is), endurance, 1 sentence, text only",
-    "mental": " describe intelligence (reasoning and memory), wisdom (perception and insight), 1 sentence, text only",
-    "communication": "describe force of personality, ability to persuade, 5 words",
-    "strengths": "1 sentence up to 10 words",
-    "weaknesses": "1 sentence up to 10 words",
-    "money": f"a number, pick between [{STARTING_FUNDS[0]}, {STARTING_FUNDS[1]}]",
-    "inventory": f"""describe items the character has, up to {NUM_INV_ITEMS} items, single string. \
-Rules for inventory:
-- Name: 1-2 words and functional.
-- Logical for the character's goals, occupation, and biography.
-- For a warrior - provide armor (always made of metal or alloy only!) and a weapon \
-(always made of a metal or alloy only). 
-- For a magician - the inventory must include relevant magical items.
-- Forbidden materials for armor and weapons: bones, wood, leather, silver, gold, copper, bronze
-- Forbidden materials for weapons: bones, wood, silver, gold, copper, bronze
-- All inventory elements must fit the goal of the character
-- No garments and clothing
-- List all items comma separated; never use 'and' """,
-}
-
-
-# Instructions to generate human player's antagonist
-# If you want to change it, follow these rules:
-# - never add "name" field, it will break internals
-# - "goal" field with the relevant description must be present, as its absence will break internals
-ANTAGONIST_DESC = {
-    "occupation": "antagonist's position in the kingdom (ruler, magician, etc.)",
-    "biography": "a brief biography, 1-2 sentences",
-    "goal": "antagonist's goal in the game. It must be in a clear \
-    contradiction to goal of the human player, you must clearly write it.",
-    "strengths": "1 sentence up to 10 words",
-    "weaknesses": "1 sentence up to 10 words",
-    "physical": "describe strength (physical power), dexterity (how agile the character is), endurance, 1 sentence, text only",
-    "mental": " describe intelligence (reasoning and memory), wisdom (perception and insight), 1 sentence, text only",
-    "communication": "describe force of personality, ability to persuade, 5 words",
-}
-
-
-# Instructions to generate an object description
-# Same, never add name field, it is added automatically
-OBJECT_DESC = {
-    "type": "identify type of th object, chose from [armor, weapon, food, drink, \
-magical item, document, book, clothing, medical, tool, other]. 1 word",
-    "description": "Is applicable, provide a brief description. \
-Return empty string if not applicable, otherwise 1 sentence.",
-    "action": "if applicable, provide description how this object acts/works. \
-Return empty string if not applicable, otherwise 1 sentence.",
-    "strength": "if applicable, provide your estimate of strength of this object, \
-e.g weak, moderate, strong, anything else suitable. This is applicable \
-if only the object can be used for battle, healing, casting spells, \
-travelling, consumed as food or drinks; for anything else - it is not applicable",
-}
-
-
 # Generic traits/descriptions of kingdoms. The LLM will pick randomly some of these
 kingdoms_traits = """The world has many kingdoms. They can be very different:
 1. magic, they rely on solving their problems on magic. Magicians are very respected
@@ -555,7 +487,10 @@ def gen_obj_est_msgs(obj: str) -> List[Dict[str, str]]:
     :param obj:
     :return:
     """
-    global OBJ_ESTIMATOR_SYS_PROMPT, OBJECT_DESC
+    global OBJ_ESTIMATOR_SYS_PROMPT
+
+    # Use Pydantic model field descriptions for structured output
+    from llm_rpg.prompts.response_models import InventoryItemDescription
 
     task = f"""Describe this game object: {obj}
 
@@ -573,8 +508,11 @@ Name rules: Remove articles and shorten to 1-2 words. Examples:
 - "battle axe" -> "axe"  
 - "steel greatsword" -> "greatsword"
 
-Additional field instructions:
-{dict_2_str(OBJECT_DESC)}
+Field descriptions:
+- type: {InventoryItemDescription.model_fields["type"].description}
+- description: {InventoryItemDescription.model_fields["description"].description}
+- action: {InventoryItemDescription.model_fields["action"].description}
+- strength: {InventoryItemDescription.model_fields["strength"].description}
 
 Return only valid JSON, no markdown formatting."""
 
