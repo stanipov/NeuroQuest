@@ -5,7 +5,7 @@ data_ignore/
 lore/
 .tmp/
 usefull_links
-tests/
+tests_old/
 test_folder/
 test_*/
 game/
