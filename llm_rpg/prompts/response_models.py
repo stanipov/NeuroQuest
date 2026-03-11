@@ -347,3 +347,20 @@ class KingdomsModel(BaseModel):
     kingdoms: List[KingdomData] = Field(
         description="List of all kingdoms in the fantasy world",
     )
+
+
+# ------------------------------- World Description Model -------------------------------
+
+
+class WorldDescriptionModel(BaseModel):
+    """Structured world description"""
+
+    name: str = Field(
+        description="Unique, captivating fantasy name for the world (1 word)",
+        max_length=50,
+        pattern="^[A-Za-z]+$",
+    )
+    description: str = Field(
+        description="Poetic world description capturing its essence (up to 5 sentences)",
+        max_length=600,
+    )

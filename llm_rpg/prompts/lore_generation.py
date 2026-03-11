@@ -117,15 +117,15 @@ def gen_world_rules_msgs(
     inspirations = {}
     if world_type.lower() == "fantasy":
         inspirations = {
-            "dark": """Blend: Lord of the Rings darkness, Norse mythology harshness, 
-            Game of Thrones political complexity. Avoid: eternal twilight/rain.""",
+            "dark": """Blend: Lord of the Rings darkness, Norse mythology harshness, \
+Game of Thrones political complexity. Avoid: eternal twilight/rain.""",
             "neutral": "Classic Dungeons & Dragons fantasy with balanced good vs evil.",
             "funny": "Terry Pratchett Discworld humor with absurd but logical magic.",
         }
     elif world_type.lower() == "sci-fi":
         inspirations = {
-            "dark": """Blend: Cyberpunk 2077 dystopia, 1984 oppression, Altered Carbon 
-            inequality, Star Wars imperial tyranny.""",
+            "dark": """Blend: Cyberpunk 2077 dystopia, 1984 oppression, Altered Carbon \
+inequality, Star Wars imperial tyranny.""",
             "neutral": "Star Wars or Mass Effect style space opera with exploration.",
             "funny": "Futurama-style humor with absurd technology and bureaucracy.",
         }
@@ -164,29 +164,45 @@ Example format:
 
 def gen_world_msgs(world_desc: str) -> List[Dict[str, str]]:
     """
-    Returns a prompt to generate world description.
+    Returns user prompt for structured world description generation.
 
-    :param world_desc: string describing some world peculiarities
-    :return:
+    System prompt with Pydantic schema is added automatically by struct_output().
+
+    :param world_desc: String describing world peculiarities/requirements
+    :return: User message for structured output
     """
+    user_prompt = f"""Create a unique fantasy world with an evocative name and description.
 
-    global LORE_GEN_SYS_PRT
-    world_prompt = f"""Generate a creative description of a unique fantasy world. Be poetic. \
-Use these world properties:
+WORLD REQUIREMENTS:
 {world_desc}
 
-Follow these instructions:
-- <WORLD NAME>: invent a captivating fantasy name for the world, 1 word
-- <WORLD DESCRIPTION>: provide up to 5 sentences.
+Your task:
+1. **Name**: Invent a captivating, memorable fantasy name (exactly 1 word, no spaces)
+   - Should sound magical, ancient, or otherworldly
+   - Avoid generic names like "Fantasy World" or "Magic Realm"
+   - Examples of good names: Aetherea, Eldoria, Xyloth, Drakmora
 
-Output content in the form:
-World Name: <WORLD NAME>
-World Description: <WORLD DESCRIPTION>"""
+2. **Description**: Write a poetic, evocative description (maximum 5 sentences)
+   - Capture the world's unique essence and atmosphere
+   - Hint at geography, magic, culture, or defining characteristics
+   - Use vivid, imaginative language that sparks curiosity
+   - Make it sound like the opening of an epic tale
 
-    return [
-        {"role": "system", "content": LORE_GEN_SYS_PRT},
-        {"role": "user", "content": world_prompt},
-    ]
+Style guidelines:
+- Be creative and original, avoid clichés
+- Write in a tone suitable for high fantasy
+- Focus on what makes this world unique and memorable
+- Keep it concise but evocative (quality over quantity)
+
+Output valid JSON matching this structure:
+{{
+  "name": "OneWordName",
+  "description": "Poetic description of up to 5 sentences capturing the world's essence..."
+}}
+
+Return ONLY the JSON object, no markdown or additional text."""
+
+    return [{"role": "user", "content": user_prompt}]
 
 
 def gen_kingdom_msgs(

@@ -14,6 +14,7 @@ import time
 from typing import Dict, Any, List
 
 from llm_rpg.utils.prompt_utils import generate_with_retry
+from llm_rpg.prompts.response_models import WorldDescriptionModel
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,6 @@ from llm_rpg.engine.tools import ObjectDescriptor
 from llm_rpg.utils.helpers import (
     parse_kingdoms_response,
     parse_towns,
-    parse_world_desc,
     parse_character,
     parse_antagonist,
     input_not_ok,
@@ -558,22 +558,45 @@ class GenerateWorld:
 
     def gen_world(self, world_desc: str, **client_kw):
         """
-        Generates the brief world description. Provide detailed world description
+        Generates world description using structured output.
 
-        :param world_desc:
-        :param client_kw:
-        :return:
+        This is a critical game component - no fallback provided. If generation
+        fails after all retries, the exception will propagate and crash the app.
         """
-        msg_world_gen = gen_world_msgs(world_desc)
-        raw_world_response = self.client.chat(msg_world_gen, **client_kw)
-        world_ai = parse_world_desc(raw_world_response["message"])
-        logger.info(f"Created world: {world_ai['name']}")
-        logger.debug(f"Prompt tokens: {raw_world_response['stats']['prompt_tokens']}")
-        logger.debug(f"Eval tokens: {raw_world_response['stats']['eval_tokens']}")
-        self.game_lore["world"] = world_ai
+                # Generate prompt
+        world_msg = gen_world_msgs(world_desc)
+
+        # Extract retry config
+        max_retries = client_kw.pop("max_generation_retries", 3)
+
+        # Use structured output with retry (NO FALLBACK - critical component)
+        response = generate_with_retry(
+            self.client,
+            world_msg,
+            response_model=WorldDescriptionModel,
+            max_retries=max_retries,
+            fallback_value=None,  # NO FALLBACK - let it fail if generation breaks
+            component_name="World Description",
+            temperature_cooldown_step=client_kw.pop(
+                "temperature_cooldown_step", self.temp_cooldown_step
+            ),
+            temperature_min=client_kw.pop("temperature_min", self.temp_min),
+            **client_kw,
+        )
+
+        # Store as dict (already JSON-serializable from model_dump())
+        self.game_lore["world"] = response["message"]
+
+        logger.info(f"Created world: {self.game_lore['world']['name']}")
+        logger.debug(f"Prompt tokens: {response['stats']['prompt_tokens']}")
+        logger.debug(f"Eval tokens: {response['stats']['eval_tokens']}")
+
         self.game_gen_params["world"] = {
             "model": self.client.model_name,
-            "messages": msg_world_gen,
+            "messages": world_msg,
+            "structured_model": "WorldDescriptionModel",
+            "used_fallback": response["stats"]["prompt_tokens"] == 0,
+            "max_retries": max_retries,
         }
 
     def gen_kingdoms(
