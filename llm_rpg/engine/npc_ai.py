@@ -248,14 +248,28 @@ Consider the human player's action carefully. Decide on your response or proacti
             logger.info(f"Found new items to describe: {new_inventory_items.keys()}")
             for item in new_inventory_items:
                 logger.info(f'Describing new item: "{item}"')
-                new_inventory_items[item]["description"] = (
-                    self.inv_items_descriptor.describe(
-                        item, temperature=self.__inv_desc_T
+                desc_result = self.inv_items_descriptor.describe(
+                    item, temperature=self.__inv_desc_T
+                )
+
+                # Use result if successful, otherwise create minimal fallback
+                if desc_result and desc_result.get("name"):
+                    new_inventory_items[item]["description"] = desc_result
+                    self.inventory_items_desc.update({item.item: desc_result})
+                else:
+                    # Fallback: minimal description with just the item name
+                    logger.debug(
+                        f"Description failed for '{item}', using minimal fallback"
                     )
-                )
-                self.inventory_items_desc.update(
-                    {item.item: new_inventory_items[item]["description"]}
-                )
+                    minimal_desc = {
+                        "name": item.title() if item else str(item),
+                        "type": "other",
+                        "description": "",
+                        "action": "",
+                        "strength": "",
+                    }
+                    new_inventory_items[item]["description"] = minimal_desc
+                    self.inventory_items_desc.update({item.item: minimal_desc})
 
         # add the new items
         for item in new_inventory_items:

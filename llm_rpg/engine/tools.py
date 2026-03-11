@@ -33,7 +33,10 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------- OBJECT DESCRIPTOR --------------------------------------------------
 class ObjectDescriptor:
     """
-    Generates descriptions and actions for a list of items (e.g. axe, spell, etc.)
+    Generates descriptions and actions for inventory items (e.g., axe, spell, etc.)
+
+    Uses an LLM to generate structured item descriptions including type,
+    description, action mechanics, and strength estimates.
     """
 
     def __init__(self, client: BaseClient) -> None:
@@ -42,16 +45,48 @@ class ObjectDescriptor:
         self.response_model = InventoryItemDescription
 
     def describe(self, obj: str, **kwargs) -> Dict[str, str]:
+        """
+        Describes a game inventory item by calling an LLM.
+
+        Args:
+            obj: The object/item name to describe (e.g., "steel longsword")
+            **kwargs: Additional arguments passed to the LLM client (e.g., temperature)
+
+        Returns:
+            Dict[str, str] with keys: name, type, description, action, strength
+
+            Returns empty dict {} if:
+            - Input is empty or whitespace-only
+            - LLM call fails with exception
+            - LLM returns invalid/unparseable response
+
+        Note:
+            Callers should check if result is non-empty before using.
+            Empty dict indicates the item description should be skipped
+            or a fallback/default should be used.
+        """
+        # Handle empty input early - return empty dict
+        if not obj or not obj.strip():
+            logger.debug("Empty object name provided, returning empty dict")
+            return {}
+
         msgs = gen_obj_est_msgs(obj)
         try:
             response = self.client.struct_output(msgs, self.response_model, **kwargs)
             self.stats[obj] = response["stats"]
             result = response["message"].model_dump()
-            result["name"] = result["name"].title()
+
+            if not result.get("name"):
+                logger.debug(f"{obj}: LLM returned empty name field, using object name")
+                result["name"] = obj.title()
+            else:
+                result["name"] = result["name"].title()
+
+            return result
+
         except Exception as e:
-            logger.warning(f"{obj}: {e}")
-            result = InventoryItemDescription().model_dump_json()
-        return result
+            logger.warning(f"{obj}: Failed to describe - {e}, returning empty dict")
+            return {}
 
 
 # ----------------------------------------------- PLAYER INPUT VALIDATOR -----------------------------------------------

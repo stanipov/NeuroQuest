@@ -151,3 +151,199 @@ class NPCResponseModel(BaseModel):
         description="Player's current location and possibly new destination",
         default=None,
     )
+
+
+# ------------------------------- Character Models -------------------------------
+
+
+class CharacterModel(BaseModel):
+    """Structured character data for players and NPCs"""
+
+    name: str = Field(description="Character's unique name (1-3 words)", max_length=50)
+    gender: str = Field(description="Character's gender", pattern="^(male|female)$")
+    occupation: str = Field(
+        description="Character's profession/role (e.g., warrior, researcher, magician, crook, merchant)",
+        max_length=50,
+    )
+    age: int = Field(
+        description="Character's age in years",
+        ge=0,
+        le=150,
+    )
+    biography: str = Field(
+        description="Brief character backstory (1-2 sentences)", max_length=200
+    )
+    deeper_pains: str = Field(
+        description="Character's emotional wounds or traumas (1 sentence, up to 10 words)",
+        max_length=100,
+    )
+    deeper_desires: str = Field(
+        description="Character's deepest wants and motivations (1 sentence, up to 10 words)",
+        max_length=100,
+    )
+    goal: str = Field(
+        description="Character's epic game objective - must be significant and drive the story",
+        max_length=150,
+    )
+    physical: str = Field(
+        description="Strength, dexterity, endurance as descriptive text (1 sentence)",
+        max_length=100,
+    )
+    mental: str = Field(
+        description="Intelligence and wisdom as descriptive text (1 sentence)",
+        max_length=100,
+    )
+    communication: str = Field(
+        description="Personality and persuasion ability (5 words max)", max_length=50
+    )
+    strengths: str = Field(
+        description="Character's notable strong points (1 sentence, up to 10 words)",
+        max_length=100,
+    )
+    weaknesses: str = Field(
+        description="Character's notable weak points (1 sentence, up to 10 words)",
+        max_length=100,
+    )
+    money: int = Field(
+        description="Starting gold coins",
+        ge=0,
+        le=10000,
+    )
+    inventory: List[str] = Field(
+        description="List of starting item names (functional, 1-2 words each)",
+        min_length=0,
+        max_length=10,
+    )
+
+
+class AntagonistModel(BaseModel):
+    """Structured antagonist data (no inventory field)"""
+
+    name: str = Field(description="Antagonist's unique name (1-3 words)", max_length=50)
+    occupation: str = Field(
+        description="Antagonist's position in the kingdom (e.g., ruler, warlock, general, merchant lord)",
+        max_length=50,
+    )
+    biography: str = Field(
+        description="Brief backstory (1-2 sentences)", max_length=200
+    )
+    goal: str = Field(
+        description="Goal that directly contradicts the player's goal - must be clear and significant",
+        max_length=150,
+    )
+    strengths: str = Field(
+        description="Notable advantages (1 sentence, up to 10 words)", max_length=100
+    )
+    weaknesses: str = Field(
+        description="Exploitable vulnerabilities (1 sentence, up to 10 words)",
+        max_length=100,
+    )
+    physical: str = Field(
+        description="Physical attributes (1 sentence)", max_length=100
+    )
+    mental: str = Field(description="Mental attributes (1 sentence)", max_length=100)
+    communication: str = Field(
+        description="Social abilities (5 words max)", max_length=50
+    )
+
+
+# ------------------------------- World Rules -------------------------------
+class WorldRulesModel(BaseModel):
+    """Structured world rules organized by domain
+
+    Each category contains 3-5 specific, actionable rules (10-15 words each)
+    that define how that aspect of the world works.
+    """
+
+    MAGIC: List[str] = Field(
+        description="How magic works: sources, costs, limitations, wild magic, spell mechanics. Provide 3-5 rules, each 10-15 words."
+    )
+
+    PHYSICS: List[str] = Field(
+        description="Natural laws and unusual phenomena: gravity, light, time, environmental effects. Provide 3-5 rules, each 10-15 words."
+    )
+
+    SOCIETY: List[str] = Field(
+        description="Social structures: governance, culture, norms, class systems, trade. Provide 3-5 rules, each 10-15 words."
+    )
+
+    GEOGRAPHY: List[str] = Field(
+        description="Geographical features: climate, terrain, regions, natural hazards, resources. Provide 3-5 rules, each 10-15 words."
+    )
+
+    TECHNOLOGY: List[str] = Field(
+        description="Technology level and innovations: crafting, transportation, communication, tools. Provide 3-5 rules, each 10-15 words."
+    )
+
+
+# ------------------------------- NPC Behavioral Rules -------------------------------
+class NPCBehaviorRulesModel(BaseModel):
+    """Structured behavioral rules for NPCs organized by situation type
+
+    Each category contains 3-5 actionable directives (10-15 words each)
+    that guide NPC decision-making in specific contexts.
+    """
+
+    COMBAT: List[str] = Field(
+        description="Fighting style and tactical decisions: aggression level, weapon preferences, retreat conditions, ally protection. Provide 3-5 rules, each 10-15 words."
+    )
+
+    NEGOTIATION: List[str] = Field(
+        description="Diplomacy and trading behavior: fairness, persuasion tactics, dealbreakers, trust-building. Provide 3-5 rules, each 10-15 words."
+    )
+
+    EXPLORATION: List[str] = Field(
+        description="Discovery and investigation: risk assessment, curiosity, documentation, caution levels. Provide 3-5 rules, each 10-15 words."
+    )
+
+    SOCIAL: List[str] = Field(
+        description="Interpersonal interactions: communication style, respect levels, memory of contacts, relationship building. Provide 3-5 rules, each 10-15 words."
+    )
+
+    MORAL: List[str] = Field(
+        description="Ethical principles and values: dealbreakers, hierarchy of values, protection of innocents, justice. Provide 3-5 rules, each 10-15 words."
+    )
+
+    GENERAL: List[str] = Field(
+        description="Overall decision-making framework: goal pursuit, strategic thinking, adaptability, long-term planning. Provide 3-5 rules, each 10-15 words."
+    )
+
+
+# ------------------------------- Kingdom Models -------------------------------
+
+
+class KingdomData(BaseModel):
+    """Single kingdom structure"""
+
+    name: str = Field(description="Kingdom's unique name (1-3 words)", max_length=50)
+    history: str = Field(
+        description="Brief kingdom founding story (1 sentence, ~10 words)",
+        max_length=100,
+    )
+    type: str = Field(
+        description="Kingdom's primary characteristic: magic, militaristic, diplomatic, or technology",
+        max_length=50,
+    )
+    location: str = Field(
+        description="Geographical location within the world (up to 1 sentence)",
+        max_length=100,
+    )
+    political_system: str = Field(
+        description="Government type and structure (max 5 words)", max_length=50
+    )
+    national_wealth: str = Field(
+        description="Economic status and resources description (max 10 words)",
+        max_length=100,
+    )
+    international: str = Field(
+        description="Relations with neighboring kingdoms (1 sentence, ~10 words)",
+        max_length=100,
+    )
+
+
+class KingdomsModel(BaseModel):
+    """Collection of kingdoms for the world"""
+
+    kingdoms: List[KingdomData] = Field(
+        description="List of all kingdoms in the fantasy world",
+    )

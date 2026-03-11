@@ -9,42 +9,97 @@ These classes provide tools to generate the respective lore part. They are gover
  by LoreGeneratorGvt which instantiates both of these and calls with proper arguments.
 """
 
-
 import logging
 import time
 from typing import Dict, Any, List
 
+from llm_rpg.utils.prompt_utils import generate_with_retry
+
 logger = logging.getLogger(__name__)
 
-from llm_rpg.prompts.lore_generation import (world_desc_default,
-                                             kingdoms_traits,
-                                             KINGDOM_DESC_STRUCT,
-                                             TOWNS_DESC_STRUCT,
-                                             CHAR_DESC_STRUCT,
-                                             ANTAGONIST_DESC,
-                                             gen_world_rules_msgs,
-                                             gen_world_msgs,
-                                             gen_kingdom_msgs,
-                                             gen_towns_msgs,
-                                             gen_human_char_msgs,
-                                             gen_antagonist_msgs,
-                                             gen_condition_end_game,
-                                             gen_npc_behavior_rules,
-                                             gen_entry_point_msg)
+from llm_rpg.prompts.lore_generation import (
+    TOWNS_DESC_STRUCT,
+    gen_world_rules_msgs,
+    gen_world_msgs,
+    gen_kingdom_msgs,
+    gen_towns_msgs,
+    gen_human_char_msgs,
+    gen_antagonist_msgs,
+    gen_condition_end_game,
+    gen_npc_behavior_rules,
+    gen_entry_point_msg,
+    _get_default_world_rules,
+    _get_default_npc_rules,
+    _get_default_character,
+    _get_default_antagonist,
+    _get_default_npc_character,
+    _get_default_kingdoms,
+    kingdoms_traits,
+)
+from llm_rpg.prompts.response_models import (
+    WorldRulesModel,
+    NPCBehaviorRulesModel,
+    CharacterModel,
+    AntagonistModel,
+)
 from llm_rpg.engine.tools import ObjectDescriptor
 
-from llm_rpg.utils.helpers import (parse_kingdoms_response,
-                                   parse_towns,
-                                   parse_world_desc,
-                                   parse_character,
-                                   parse_antagonist,
-                                   input_not_ok)
+from llm_rpg.utils.helpers import (
+    parse_kingdoms_response,
+    parse_towns,
+    parse_world_desc,
+    parse_character,
+    parse_antagonist,
+    input_not_ok,
+)
 
 from llm_rpg.templates.base_client import BaseClient
 
 import random
 from time import sleep
 from copy import deepcopy as dCP
+
+
+def _log_generation_summary(game_gen_params: Dict[str, Any], lore: Dict[str, Any]):
+    """Log summary of generation results showing what used fallback"""
+    logger.info("=" * 60)
+    logger.info("LORE GENERATION SUMMARY")
+    logger.info("=" * 60)
+
+    issues = []
+    successes = []
+
+    if "world_outline" in game_gen_params:
+        if game_gen_params["world_outline"].get("used_fallback"):
+            issues.append("World Rules (used defaults)")
+        else:
+            successes.append("World Rules")
+
+    if "npc_rules" in lore and lore["npc_rules"]:
+        npc_params = game_gen_params.get("npc_rules", {})
+        generated_npcs = npc_params.get("generated", [])
+        fallback_usage = npc_params.get("fallback_usage", {})
+
+        for npc_name in generated_npcs:
+            if fallback_usage.get(npc_name):
+                issues.append(f"NPC Rules: {npc_name} (used defaults)")
+            else:
+                successes.append(f"NPC Rules: {npc_name}")
+
+    if successes:
+        logger.info(f"✓ Successfully generated ({len(successes)} components):")
+        for item in successes:
+            logger.info(f"  - {item}")
+
+    if issues:
+        logger.warning(f"⚠ Components using fallback defaults ({len(issues)}):")
+        for item in issues:
+            logger.warning(f"  - {item}")
+        logger.warning("Consider checking LLM connection and regenerating if needed.")
+    else:
+        logger.info("All components generated successfully without fallback!")
+
+    logger.info("=" * 60)
 
 
 class LoreGeneratorGvt:
@@ -61,25 +116,47 @@ class LoreGeneratorGvt:
         self.lore = {}
         self.game_gen_params = {}
         # LUT for inventory items
-        self.lore['inventory_lut'] = {}
+        self.lore["inventory_lut"] = {}
 
         # We can generate own world description or use default one
         # If no world description/outline/rues were generated, then
         # the default will be used
-        self.lore['world_outline'] = None
+        self.lore["world_outline"] = None
         # API calls delay in seconds
         # needed for rate limitations
         if "api_delay" in kwargs:
-            self.api_delay = kwargs.pop('api_delay')
+            self.api_delay = kwargs.pop("api_delay")
         else:
             self.api_delay = 0
 
-        self.world_generator = GenerateWorld(self.client)
-        self.char_gen = GenerateCharacter(self.client)
+        # Temperature cooldown settings for retry logic (from config or defaults)
+        if "temperature_cooldown_step" in kwargs:
+            self.temp_cooldown_step = kwargs.pop("temperature_cooldown_step")
+        else:
+            logger.info("temperature_cooldown_step not in config, using default 0.1")
+            self.temp_cooldown_step = 0.1
+
+        if "temperature_min" in kwargs:
+            self.temp_min = kwargs.pop("temperature_min")
+        else:
+            logger.info("temperature_min not in config, using default 0.5")
+            self.temp_min = 0.5
+
+        self.world_generator = GenerateWorld(
+            self.client,
+            temperature_cooldown_step=self.temp_cooldown_step,
+            temperature_min=self.temp_min,
+        )
+        self.char_gen = GenerateCharacter(
+            self.client,
+            temperature_cooldown_step=self.temp_cooldown_step,
+            temperature_min=self.temp_min,
+        )
         self.ObjDesc = ObjectDescriptor(client)
 
-
-    def _generate_world_outline(self, num_rules: int, kind: str, world_type: str, **client_kwargs):
+    def _generate_world_outline(
+        self, num_rules: int, kind: str, world_type: str, **client_kwargs
+    ):
         """
         Generates world rules/outline.
         :param num_rules:
@@ -88,13 +165,16 @@ class LoreGeneratorGvt:
         :param client_kwargs:
         :return:
         """
-        self.world_generator.gen_world_outline(num_rules, world_type, kind)
-        self.WORLD_DESC = self.world_generator.game_lore['world_outline']
-        self.lore['world_outline'] = self.world_generator.game_lore['world_outline']
+        self.world_generator.gen_world_outline(
+            num_rules, world_type, kind, **client_kwargs
+        )
+        self.WORLD_DESC = self.world_generator.game_lore["world_outline"]
+        self.lore["world_outline"] = self.world_generator.game_lore["world_outline"]
         self.game_gen_params.update(self.world_generator.game_gen_params)
 
-
-    def generate_world(self, num_rules: int, kind: str, world_type: str, **client_kwargs):
+    def generate_world(
+        self, num_rules: int, kind: str, world_type: str, **client_kwargs
+    ):
         """
         Generates world description and the world based on the AI generated rules description
         :param num_rules: number of world rules
@@ -103,134 +183,180 @@ class LoreGeneratorGvt:
         :param client_kwargs:
         :return:
         """
+        # Pop max_retries before passing to gen_world() since it's not an LLM parameter
+        _ = client_kwargs.pop("max_retries", None)
+
         self._generate_world_outline(num_rules, kind, world_type, **client_kwargs)
-        self.world_generator.gen_world(self.lore['world_outline'], **client_kwargs)
+        self.world_generator.gen_world(self.lore["world_outline"], **client_kwargs)
         self.lore.update(self.world_generator.game_lore)
         self.game_gen_params.update(self.world_generator.game_gen_params)
 
-
-    def generate_kingdoms(self, num_kingdoms:int,
-                          kingdom_types:str|None=None,
-                          **client_kw):
+    def generate_kingdoms(
+        self, num_kingdoms: int, kingdom_types: str | None = None, **client_kw
+    ):
         self.world_generator.gen_kingdoms(num_kingdoms, kingdom_types, **client_kw)
         self.lore.update(self.world_generator.game_lore)
         self.game_gen_params.update(self.world_generator.game_gen_params)
 
-
-    def generate_towns(self, num_towns,
-                       **client_kw):
+    def generate_towns(self, num_towns, **client_kw):
         self.world_generator.gen_towns(num_towns, **client_kw)
         self.lore.update(self.world_generator.game_lore)
         self.game_gen_params.update(self.world_generator.game_gen_params)
 
-
     def generate_human_player(self, **client_kw):
         # random choice of starting location
-        kingdom_name = random.choice(list(self.lore['kingdoms'].keys()))
-        town_name = random.choice(list(self.lore['towns'][kingdom_name].keys()))
+        kingdom_name = random.choice(list(self.lore["kingdoms"].keys()))
+        town_name = random.choice(list(self.lore["towns"][kingdom_name].keys()))
 
-        ans = self.char_gen.gen_characters(self.lore, "human",
-                                           num_chars=1,
-                                           kingdom_name=kingdom_name,
-                                           town_name=town_name,
-                                           **client_kw)
+        ans = self.char_gen.gen_characters(
+            self.lore,
+            "human",
+            num_chars=1,
+            kingdom_name=kingdom_name,
+            town_name=town_name,
+            **client_kw,
+        )
         _key = list(ans.keys())[0]
-        self.lore['human_player'] = ans[_key]
+        self.lore["human_player"] = ans[_key]
 
-        if 'start_location' not in self.lore:
-            self.lore['start_location'] = {}
+        if "start_location" not in self.lore:
+            self.lore["start_location"] = {}
 
-        self.lore['start_location']['human'] = {
-            'kingdom': kingdom_name,
-            'town': town_name
+        self.lore["start_location"]["human"] = {
+            "kingdom": kingdom_name,
+            "town": town_name,
         }
         self.game_gen_params.update(self.char_gen.char_gen_params)
 
-
-    def generate_npc(self, num_chars:int=1, **client_kw):
-        if 'start_location' in self.lore and 'human' in self.lore['start_location']:
-            kingdom_name = self.lore['start_location']['human']['kingdom']
-            town_name = self.lore['start_location']['human']['town']
+    def generate_npc(self, num_chars: int = 1, **client_kw):
+        if "start_location" in self.lore and "human" in self.lore["start_location"]:
+            kingdom_name = self.lore["start_location"]["human"]["kingdom"]
+            town_name = self.lore["start_location"]["human"]["town"]
         else:
             logger.error(f"You must generate a human character before!")
             raise KeyError(f"You must generate a human character before!")
 
-        ans = self.char_gen.gen_characters(self.lore, "human",
-                                           num_chars=num_chars,
-                                           kingdom_name=kingdom_name,
-                                           town_name=town_name,
-                                           **client_kw)
+        ans = self.char_gen.gen_characters(
+            self.lore,
+            "human",
+            num_chars=num_chars,
+            kingdom_name=kingdom_name,
+            town_name=town_name,
+            **client_kw,
+        )
 
-        if 'start_location' not in self.lore:
-            self.lore['start_location'] = {}
+        if "start_location" not in self.lore:
+            self.lore["start_location"] = {}
 
-        if 'npc' not in self.lore['start_location']:
-            self.lore['start_location']['npc'] = {}
+        if "npc" not in self.lore["start_location"]:
+            self.lore["start_location"]["npc"] = {}
 
-        self.lore['npc'] = {}
+        self.lore["npc"] = {}
 
         for _key in list(ans.keys()):
             logger.info(f"Adding {_key}")
-            self.lore['npc'][_key] = dCP(ans[_key])
-            self.lore['start_location']['npc'][_key] = {
-                'kingdom': kingdom_name,
-                'town': town_name}
+            self.lore["npc"][_key] = dCP(ans[_key])
+            self.lore["start_location"]["npc"][_key] = {
+                "kingdom": kingdom_name,
+                "town": town_name,
+            }
 
-
-    def generate_antagonist(self, same_location:bool=True):
+    def generate_antagonist(self, same_location: bool = True):
         if same_location:
-            kingdom_name = self.lore['start_location']['human']['kingdom']
+            kingdom_name = self.lore["start_location"]["human"]["kingdom"]
         else:
             max_iter = 10
             cnt = 0
-            kingdom_name = random.choice(list(self.lore['kingdoms'].keys()))
-            while kingdom_name == self.lore['start_location']['human']['kingdom'] and cnt < max_iter:
-                kingdom_name = random.choice(list(self.lore['kingdoms'].keys()))
+            kingdom_name = random.choice(list(self.lore["kingdoms"].keys()))
+            while (
+                kingdom_name == self.lore["start_location"]["human"]["kingdom"]
+                and cnt < max_iter
+            ):
+                kingdom_name = random.choice(list(self.lore["kingdoms"].keys()))
                 cnt += 1
 
-        ans = self.char_gen.gen_characters(self.lore, 'enemy',
-                                           player_desc=self.lore['human_player'],
-                                           kingdom_name=kingdom_name)
+        ans = self.char_gen.gen_characters(
+            self.lore,
+            "enemy",
+            player_desc=self.lore["human_player"],
+            kingdom_name=kingdom_name,
+        )
         _key = list(ans.keys())[0]
-        self.lore['antagonist'] = ans[_key]
+        self.lore["antagonist"] = ans[_key]
 
-        if 'start_location' not in self.lore:
-            self.lore['start_location'] = {}
+        if "start_location" not in self.lore:
+            self.lore["start_location"] = {}
 
-        self.lore['start_location']['antagonist'] = {
-            'kingdom': kingdom_name,
-            'town': ""}
+        self.lore["start_location"]["antagonist"] = {
+            "kingdom": kingdom_name,
+            "town": "",
+        }
         self.game_gen_params.update(self.char_gen.char_gen_params)
 
-
-    def generate_end_game_conditions(self, num_conditions:int=3):
-        self.world_generator.gen_end_game_conditions(player_desc=self.lore['human_player'],
-                                                     player_loc=self.lore['start_location']['human']['kingdom'],
-                                                     antag_desc=self.lore['antagonist'],
-                                                     antag_loc=self.lore['start_location']['antagonist']['kingdom'],
-                                                     num_conditions=num_conditions)
+    def generate_end_game_conditions(self, num_conditions: int = 3):
+        self.world_generator.gen_end_game_conditions(
+            player_desc=self.lore["human_player"],
+            player_loc=self.lore["start_location"]["human"]["kingdom"],
+            antag_desc=self.lore["antagonist"],
+            antag_loc=self.lore["start_location"]["antagonist"]["kingdom"],
+            num_conditions=num_conditions,
+        )
         self.lore.update(self.world_generator.game_lore)
         self.game_gen_params.update(self.world_generator.game_gen_params)
 
+    def generate_npc_action_rules(
+        self, num_rules_per_category: int = 3, **client_kw
+    ) -> None:
+        """Generate categorized behavioral rules for every NPC with retry and fallback"""
+        if "npc" not in self.lore:
+            logger.error("No NPCs found - generate NPCs first")
+            raise KeyError("Must generate NPCs before generating action rules")
 
-    def generate_npc_action_rules(self, num_rules:int=5, **client_kw) -> None:
-        """
-        Generates behavioral rules for every NPC
-        :param num_rules:
-        :param client_kw:
-        :return:
-        """
-        if 'npc' in self.lore:
-            if 'npc_rules' not in self.lore:
-                self.lore['npc_rules'] = {}
-            for npc_name in self.lore['npc']:
-                _msg = gen_npc_behavior_rules(self.lore['npc'][npc_name], num_rules)
-                ans = self.client.chat(_msg, **client_kw)
-                self.lore['npc_rules'][npc_name] = ans['message']
-        else:
-            logger.error(f"You must generate NPCs first")
-            raise KeyError(f"You must generate NPCs first")
+        if "npc_rules" not in self.lore:
+            self.lore["npc_rules"] = {}
 
+        max_retries = client_kw.pop("max_retries", 3)
+
+        gen_results = {}
+
+        for npc_name in self.lore["npc"]:
+            logger.info(f"Generating behavioral rules for {npc_name}")
+
+            msgs = gen_npc_behavior_rules(
+                self.lore["npc"][npc_name],
+                num_rules_per_category=num_rules_per_category,
+            )
+
+            ans = generate_with_retry(
+                client=self.client,
+                messages=msgs,
+                response_model=NPCBehaviorRulesModel,
+                max_retries=max_retries,
+                fallback_value=_get_default_npc_rules(),
+                component_name=f"NPC Rules: {npc_name}",
+                # Allow per-call override, otherwise use instance variable (from config)
+                temperature_cooldown_step=client_kw.pop(
+                    "temperature_cooldown_step", self.temp_cooldown_step
+                ),
+                temperature_min=client_kw.pop("temperature_min", self.temp_min),
+                **client_kw,
+            )
+
+            self.lore["npc_rules"][npc_name] = ans["message"]
+
+            used_fallback = ans["stats"]["prompt_tokens"] == 0
+            gen_results[npc_name] = used_fallback
+
+            status = "with fallback" if used_fallback else "successfully"
+            logger.info(f"Generated rules for {npc_name} {status}")
+
+        self.game_gen_params["npc_rules"] = {
+            "generated": list(gen_results.keys()),
+            "fallback_usage": gen_results,
+            "max_retries": max_retries,
+        }
+
+        logger.info("All NPC behavioral rules generation completed")
 
     def describe_inventories(self, temperature=0.25):
         """
@@ -239,59 +365,79 @@ class LoreGeneratorGvt:
         :param temperature:
         :return:
         """
-        if 'human_player' in self.lore:
+        if "human_player" in self.lore:
             logger.info(f"Describing inventory items for the human player")
-            self.lore['human_player']['money'] = int(self.lore['human_player']['money'])
-            inv_items = self.lore['human_player']['inventory']
+            self.lore["human_player"]["money"] = int(self.lore["human_player"]["money"])
+            inv_items = self.lore["human_player"]["inventory"]
             ans = self.__describe_items(inv_items, temperature)
             if ans != {}:
-                self.lore['inventory_lut'].update(ans)
-                self.lore['human_player']['inventory'] = list(ans.keys())
+                self.lore["inventory_lut"].update(ans)
+                self.lore["human_player"]["inventory"] = list(ans.keys())
 
         if "npc" in self.lore:
             logger.info(f"Describing inventory items fot NPCs")
-            for npc in self.lore['npc']:
+            for npc in self.lore["npc"]:
                 logger.info(f"NPC: {npc}")
-                self.lore['npc'][npc]['money'] = int(self.lore['npc'][npc]['money'])
-                inv_items = self.lore['npc'][npc]['inventory']
+                self.lore["npc"][npc]["money"] = int(self.lore["npc"][npc]["money"])
+                inv_items = self.lore["npc"][npc]["inventory"]
                 ans = self.__describe_items(inv_items, temperature)
                 if ans != {}:
-                    self.lore['inventory_lut'].update(ans)
-                    self.lore['npc'][npc]['inventory'] = list(ans.keys())
+                    self.lore["inventory_lut"].update(ans)
+                    self.lore["npc"][npc]["inventory"] = list(ans.keys())
 
         if "antagonist" in self.lore:
-            if 'inventory' in self.lore["antagonist"]:
+            if "inventory" in self.lore["antagonist"]:
                 logger.info(f"Describing inventory items for the antagonist")
-                inv_items = self.lore['antagonist']['inventory']
+                inv_items = self.lore["antagonist"]["inventory"]
                 ans = self.__describe_items(inv_items, temperature)
                 if ans != {}:
-                    self.lore['inventory_lut'].update(ans)
-                    self.lore['antagonist']['inventory'] = list(ans.keys())
+                    self.lore["inventory_lut"].update(ans)
+                    self.lore["antagonist"]["inventory"] = list(ans.keys())
 
         logger.info(f"Done")
 
+    def __describe_items(self, items: List[str] | str, temperature=0.25):
+        """
+        Describes inventory items using ObjectDescriptor.
 
-    def __describe_items(self,
-                         items: List[str]|str,
-                         temperature=0.25):
+        Empty items and failed descriptions are skipped.
+
+        Args:
+            items: Inventory items as comma-separated string or list of strings
+            temperature: LLM temperature parameter for description generation
+
+        Returns:
+            Dict mapping item names to their description dictionaries.
+            Only successfully described items with non-empty names are included.
+            Items with empty names or failed descriptions are excluded.
+        """
         ans = {}
         inv_items = []
 
         if type(items) == str:
-            inv_items = [x.strip() for x in items.split(', ')]
-        if type(items) == list:
+            inv_items = [x.strip() for x in items.split(", ")]
+        elif type(items) == list:
             inv_items = dCP(items)
-        if type(items) not in (str, list):
-            logger.error(f"Inventory items must be str or list, got {type(items)}")
         else:
-            for item in inv_items:
-                logger.info(f"Describing {item}")
-                _t = self.ObjDesc.describe(item, temperature=temperature)
-                ans[_t['name']] = _t
-                sleep(self.api_delay)
+            logger.error(f"Inventory items must be str or list, got {type(items)}")
+            return ans
+
+        for item in inv_items:
+            # Skip empty or whitespace-only items
+            if not item or not item.strip():
+                logger.debug(f"Skipping empty inventory item")
+                continue
+
+            logger.info(f"Describing {item}")
+            _t = self.ObjDesc.describe(item, temperature=temperature)
+
+            # Only add non-empty results with valid names (defense in depth)
+            if _t and _t.get("name"):
+                ans[_t["name"]] = _t
+
+            sleep(self.api_delay)
 
         return ans
-
 
     def gen_starting_point(self, **client_kw):
         """
@@ -299,33 +445,39 @@ class LoreGeneratorGvt:
         :param client_kw:
         :return:
         """
-        human_player = self.lore['human_player']
-        human_start_k = self.lore['start_location']['human']['kingdom']
-        human_start_t = self.lore['start_location']['human']['town']
+        human_player = self.lore["human_player"]
+        human_start_k = self.lore["start_location"]["human"]["kingdom"]
+        human_start_t = self.lore["start_location"]["human"]["town"]
 
-        k_desc = self.lore['kingdoms'][human_start_k]
-        t_desc = self.lore['towns'][human_start_k][human_start_t]
-        world_desc = self.lore['world']
+        k_desc = self.lore["kingdoms"][human_start_k]
+        t_desc = self.lore["towns"][human_start_k][human_start_t]
+        world_desc = self.lore["world"]
 
         if "npc" in self.lore:
-            npcs_desc = self.lore['npc']
-            npc_start_location = self.lore["start_location"]['npc']
+            npcs_desc = self.lore["npc"]
+            npc_start_location = self.lore["start_location"]["npc"]
         else:
             npcs_desc = {}
             npc_start_location = {}
 
-        entry_msgs = gen_entry_point_msg(world_desc,
-                                         human_player,
-                                         human_start_k,
-                                         k_desc,
-                                         human_start_t,
-                                         t_desc,
-                                         npcs_desc,
-                                         npc_start_location)
+        entry_msgs = gen_entry_point_msg(
+            world_desc,
+            human_player,
+            human_start_k,
+            k_desc,
+            human_start_t,
+            t_desc,
+            npcs_desc,
+            npc_start_location,
+        )
 
         ans = self.client.chat(entry_msgs, **client_kw)
-        self.game_gen_params['start'] = entry_msgs
-        self.lore['start'] = ans['message']
+        self.game_gen_params["start"] = entry_msgs
+        self.lore["start"] = ans["message"]
+
+    def log_generation_summary(self):
+        """Log summary of what succeeded vs used fallback during generation"""
+        _log_generation_summary(self.game_gen_params, self.lore)
 
 
 class GenerateWorld:
@@ -340,32 +492,70 @@ class GenerateWorld:
 
         # api delay to respect the rate limits
         if "api_delay" in kwargs:
-            self.api_delay = kwargs.pop('api_delay')
+            self.api_delay = kwargs.pop("api_delay")
         else:
             self.api_delay = 0
 
+        # Temperature cooldown settings for retry logic (from config or defaults)
+        if "temperature_cooldown_step" in kwargs:
+            self.temp_cooldown_step = kwargs.pop("temperature_cooldown_step")
+        else:
+            logger.info(
+                "GenerateWorld: temperature_cooldown_step not in config, using default 0.1"
+            )
+            self.temp_cooldown_step = 0.1
 
-    def gen_world_outline(self, num_rules: int,
-                          world_type:str='fantasy',
-                          kind: str= 'dark',  **client_kw):
-        """
-        Generates the world rules/outline
-        :param world_type: type of world, fantasy or sci-fi
-        :param num_rules: int -- number of rules to generate
-        :param kind: str -- type of the world, allowed: dark, neutral, funny
-        :return:
-        """
+        if "temperature_min" in kwargs:
+            self.temp_min = kwargs.pop("temperature_min")
+        else:
+            logger.info(
+                "GenerateWorld: temperature_min not in config, using default 0.5"
+            )
+            self.temp_min = 0.5
+
+    def gen_world_outline(
+        self,
+        num_rules: int,
+        world_type: str = "fantasy",
+        kind: str = "dark",
+        **client_kw,
+    ):
+        """Generate structured world rules with config-driven retry and fallback"""
         msgs = gen_world_rules_msgs(num_rules, world_type, kind)
-        raw_world_desc_response = self.client.chat(msgs, **client_kw)
-        logger.info(f"Created world outline")
-        logger.debug(f"Prompt tokens: {raw_world_desc_response['stats']['prompt_tokens']}")
-        logger.debug(f"Eval tokens: {raw_world_desc_response['stats']['eval_tokens']}")
-        self.game_lore['world_outline'] = raw_world_desc_response['message']
-        self.game_gen_params['world_outline'] = {
-            "model": self.client.model_name,
-            "messages": msgs
-        }
 
+        max_retries = client_kw.pop("max_retries", 3)
+
+        response = generate_with_retry(
+            client=self.client,
+            messages=msgs,
+            response_model=WorldRulesModel,
+            max_retries=max_retries,
+            fallback_value=_get_default_world_rules(),
+            component_name="World Rules",
+            # Allow per-call override, otherwise use instance variable (from config)
+            temperature_cooldown_step=client_kw.pop(
+                "temperature_cooldown_step", self.temp_cooldown_step
+            ),
+            temperature_min=client_kw.pop("temperature_min", self.temp_min),
+            **client_kw,
+        )
+
+        self.game_lore["world_outline"] = response["message"]
+
+        logger.info(
+            f"Created structured world outline with categories: "
+            f"{list(self.game_lore['world_outline'].keys())}"
+        )
+        logger.debug(f"Prompt tokens: {response['stats']['prompt_tokens']}")
+        logger.debug(f"Eval tokens: {response['stats']['eval_tokens']}")
+
+        self.game_gen_params["world_outline"] = {
+            "model": self.client.model_name,
+            "messages": msgs,
+            "structured_model": "WorldRulesModel",
+            "used_fallback": response["stats"]["prompt_tokens"] == 0,
+            "max_retries": max_retries,
+        }
 
     def gen_world(self, world_desc: str, **client_kw):
         """
@@ -377,43 +567,76 @@ class GenerateWorld:
         """
         msg_world_gen = gen_world_msgs(world_desc)
         raw_world_response = self.client.chat(msg_world_gen, **client_kw)
-        world_ai = parse_world_desc(raw_world_response['message'])
+        world_ai = parse_world_desc(raw_world_response["message"])
         logger.info(f"Created world: {world_ai['name']}")
         logger.debug(f"Prompt tokens: {raw_world_response['stats']['prompt_tokens']}")
         logger.debug(f"Eval tokens: {raw_world_response['stats']['eval_tokens']}")
-        self.game_lore['world'] = world_ai
-        self.game_gen_params['world'] = {
+        self.game_lore["world"] = world_ai
+        self.game_gen_params["world"] = {
             "model": self.client.model_name,
-            "messages": msg_world_gen
+            "messages": msg_world_gen,
         }
 
-    def gen_kingdoms(self, num_kingdoms:int, kingdom_types:str|None=None, **client_kw):
+    def gen_kingdoms(
+        self, num_kingdoms: int, kingdom_types: str | None = None, **client_kw
+    ):
         """
-        Generates kingdoms in the world. Provide number of kingdoms, their types
+        Generates kingdoms in the world using structured output.
+
+        This is a critical game component - no fallback provided. If generation
+        fails after all retries, the exception will propagate and crash the app.
         """
+        from llm_rpg.prompts.response_models import KingdomsModel
 
-        global kingdoms_traits
-        if kingdom_types is None:
-            kingdom_types = kingdoms_traits
-        if kingdom_types is not None and kingdom_types == "":
-            kingdom_types = kingdoms_traits
+        # Use provided kingdom types or default to predefined traits
+        if kingdom_types is None or kingdom_types == "":
+            kt = kingdoms_traits
+        else:
+            kt = kingdom_types
 
-        kingdoms_msg = gen_kingdom_msgs(num_kingdoms, kingdom_types, self.game_lore['world'])
-        kingdoms_raw_response = self.client.chat(kingdoms_msg, **client_kw)
-        kingdoms_ai = parse_kingdoms_response(kingdoms_raw_response['message'], self.expected_flds_kingdoms_def)
-        logger.info(f"Created kingdoms: {list(kingdoms_ai.keys())}")
-        logger.debug(f"Prompt tokens: {kingdoms_raw_response['stats']['prompt_tokens']}")
-        logger.debug(f"Eval tokens: {kingdoms_raw_response['stats']['eval_tokens']}")
-        self.game_lore['kingdoms'] = kingdoms_ai
-        self.game_gen_params['kingdoms'] = {
-            "model": self.client.model_name,
-            "messages": kingdoms_msg
+        # Generate prompt
+        kingdoms_msg = gen_kingdom_msgs(num_kingdoms, kt, self.game_lore["world"])
+
+        # Extract retry config
+        max_retries = client_kw.pop("max_generation_retries", 3)
+
+        # Use structured output with retry (NO FALLBACK - critical component)
+        response = generate_with_retry(
+            self.client,
+            kingdoms_msg,
+            response_model=KingdomsModel,
+            max_retries=max_retries,
+            fallback_value=None,  # NO FALLBACK - let it fail if generation breaks
+            component_name="Kingdoms",
+            temperature_cooldown_step=client_kw.pop(
+                "temperature_cooldown_step", self.temp_cooldown_step
+            ),
+            temperature_min=client_kw.pop("temperature_min", self.temp_min),
+            **client_kw,
+        )
+
+        # Convert from list to dict for backward compatibility with downstream code
+        kingdoms_data = response["message"][
+            "kingdoms"
+        ]  # List of dicts (JSON-serializable)
+        self.game_lore["kingdoms"] = {
+            k["name"]: k  # Each k is already a plain dict from model_dump()
+            for k in kingdoms_data
         }
 
+        logger.info(f"Created kingdoms: {list(self.game_lore['kingdoms'].keys())}")
+        logger.debug(f"Prompt tokens: {response['stats']['prompt_tokens']}")
+        logger.debug(f"Eval tokens: {response['stats']['eval_tokens']}")
 
-    def gen_towns(self,
-                  num_towns,
-                  **client_kw):
+        self.game_gen_params["kingdoms"] = {
+            "model": self.client.model_name,
+            "messages": kingdoms_msg,
+            "structured_model": "KingdomsModel",
+            "used_fallback": response["stats"]["prompt_tokens"] == 0,
+            "max_retries": max_retries,
+        }
+
+    def gen_towns(self, num_towns, **client_kw):
         """
         Generates towns for each kingdom. Provide a number of towns.
         TBD: a single number for all kingdoms or introduce some variability. Issue with variability
@@ -423,29 +646,37 @@ class GenerateWorld:
         :return:
         """
 
-        self.game_lore['towns'] = {}
-        self.game_gen_params['towns'] = {}
+        self.game_lore["towns"] = {}
+        self.game_gen_params["towns"] = {}
 
-        for kingdom in self.game_lore['kingdoms']:
+        for kingdom in self.game_lore["kingdoms"]:
             logger.info(f"Generating {num_towns} towns for {kingdom}")
-            msg_towns_k = gen_towns_msgs(num_towns, self.game_lore['world'], self.game_lore['kingdoms'], kingdom)
+            msg_towns_k = gen_towns_msgs(
+                num_towns, self.game_lore["world"], self.game_lore["kingdoms"], kingdom
+            )
             time.sleep(self.api_delay)
             towns_raw_response = self.client.chat(msg_towns_k, **client_kw)
-            logger.debug(f"Prompt tokens: {towns_raw_response['stats']['prompt_tokens']}")
+            logger.debug(
+                f"Prompt tokens: {towns_raw_response['stats']['prompt_tokens']}"
+            )
             logger.debug(f"Eval tokens: {towns_raw_response['stats']['eval_tokens']}")
-            towns = parse_towns(towns_raw_response['message'], self.expected_flds_towns_def)
-            self.game_lore['towns'][kingdom] = towns
-            self.game_gen_params['towns'] = {
+            towns = parse_towns(
+                towns_raw_response["message"], self.expected_flds_towns_def
+            )
+            self.game_lore["towns"][kingdom] = towns
+            self.game_gen_params["towns"] = {
                 "model": self.client.model_name,
-                "messages": msg_towns_k
+                "messages": msg_towns_k,
             }
 
-    def gen_end_game_conditions(self,
-                                player_desc:Dict[str, str],
-                                player_loc:str,
-                                antag_desc:Dict[str, str],
-                                antag_loc:str,
-                                num_conditions:int) -> None:
+    def gen_end_game_conditions(
+        self,
+        player_desc: Dict[str, str],
+        player_loc: str,
+        antag_desc: Dict[str, str],
+        antag_loc: str,
+        num_conditions: int,
+    ) -> None:
         """
         Generates conditions to win and loose the game given the description of the human player and its antagonist
         :param antag_loc: location (starting) of the antagonist/enemy
@@ -462,18 +693,29 @@ class GenerateWorld:
         for kind in kinds:
             logger.info(f"Generating {num_conditions} conditions to {kind}")
             try:
-                cond_gen_msgs = gen_condition_end_game(self.game_lore, player_desc, antag_desc, player_loc, antag_loc,
-                                                   num_conditions, kind)
+                cond_gen_msgs = gen_condition_end_game(
+                    self.game_lore,
+                    player_desc,
+                    antag_desc,
+                    player_loc,
+                    antag_loc,
+                    num_conditions,
+                    kind,
+                )
                 raw_response = self.client.chat(cond_gen_msgs)
                 self.game_lore["end_game"][kind] = raw_response["message"]
                 self.game_gen_params["end_game"][kind] = {
                     "model": self.client.model_name,
-                    "messages": cond_gen_msgs
+                    "messages": cond_gen_msgs,
                 }
 
             except Exception as e:
-                logger.error(f"Could not generate conditions to \"{kind}\" with \"{e}\" error")
-                raise ValueError(f"Could not generate conditions to \"{kind}\" with \"{e}\" error")
+                logger.error(
+                    f'Could not generate conditions to "{kind}" with "{e}" error'
+                )
+                raise ValueError(
+                    f'Could not generate conditions to "{kind}" with "{e}" error'
+                )
             logger.info(f"Sleeping {self.api_delay} sec")
             time.sleep(self.api_delay)
         logger.info("Done")
@@ -481,8 +723,8 @@ class GenerateWorld:
 
 class GenerateCharacter:
     global CHAR_DESC_STRUCT, ANTAGONIST_DESC
+
     def __init__(self, client: BaseClient, **kwargs):
-        global CHAR_DESC_STRUCT, ANTAGONIST_DESC
         self.client = client
 
         # stores all characters generated (human, antagonist, npcs, etc)
@@ -492,16 +734,26 @@ class GenerateCharacter:
         # a mapping between names and kinds (human, npc, etc.)
         self.characters_kinds = {}
 
-        # defaults for expected fields for a human playable characters
-        self.DEF_H_CHAR_FLDS = set(CHAR_DESC_STRUCT.keys())
-        # defaults for the antagonist creation
-        self.DEF_A_CHAR_FLDS = set(ANTAGONIST_DESC.keys())
+        # Temperature cooldown settings for retry logic
+        if "temperature_cooldown_step" in kwargs:
+            self.temp_cooldown_step = kwargs.pop("temperature_cooldown_step")
+        else:
+            logger.info(
+                "GenerateCharacter: temperature_cooldown_step not provided, using default 0.1"
+            )
+            self.temp_cooldown_step = 0.1
 
+        if "temperature_min" in kwargs:
+            self.temp_min = kwargs.pop("temperature_min")
+        else:
+            logger.info(
+                "GenerateCharacter: temperature_min not provided, using default 0.5"
+            )
+            self.temp_min = 0.5
 
-    def gen_characters(self,
-                      game_lore:Dict[str, str],
-                      kind:str='human',
-                      **kwargs) -> Dict[str, Any]:
+    def gen_characters(
+        self, game_lore: Dict[str, str], kind: str = "human", **kwargs
+    ) -> Dict[str, Any]:
         """
         Creates a character
 
@@ -514,10 +766,10 @@ class GenerateCharacter:
 
         characters = None
 
-        if kind == 'human':
+        if kind == "human":
             characters = self.__gen_playable_char(game_lore, **kwargs)
-            logger.info(f'Generated {len(characters.keys())} characters')
-        if kind == 'antagonist' or kind == 'enemy':
+            logger.info(f"Generated {len(characters.keys())} characters")
+        if kind == "antagonist" or kind == "enemy":
             characters = self.__gen_antagonist(game_lore, **kwargs)
 
         if not characters and characters != {}:
@@ -530,114 +782,111 @@ class GenerateCharacter:
 
         return characters
 
-    def __gen_playable_char(self, game_lore: Dict[str, str],**kwargs) -> Dict[str, str]:
-        """
-        Generates a string with character description. To be parsed
-        :param kwargs: These are expected
-            char_desc_struct -- a dictionary with mandatory fields to generate, if None, default is used
-            num_chars -- number of characters to generate, defaults to 1
-            kingdom_name -- kingdom name
-            town_name -- town name
-        :return:
-        """
+    def __gen_playable_char(
+        self, game_lore: Dict[str, str], **kwargs
+    ) -> Dict[str, Any]:
+        """Generates ONE playable character using structured output"""
 
-        char_description = kwargs.get('char_desc_struct', None)
-        num_chars = kwargs.get('num_chars', 1)
-
-        var2verify = ['kingdom_name', 'town_name']
-        for varname in var2verify:
-            var = kwargs.get(varname, '')
-            if var and var == '':
-                logger.error(f"Expected \"{varname}\" to be a string type, got \"{var}\"")
-                raise ValueError(f"Expected \"{varname}\" to be a string type, got \"{var}\"")
-
-        kingdom_name = kwargs.get('kingdom_name', '')
-        town_name = kwargs.get('town_name', '')
+        kingdom_name = kwargs.get("kingdom_name", "")
+        town_name = kwargs.get("town_name", "")
+        max_retries = kwargs.pop("max_retries", 3)
 
         names2avoid = list(self.characters.keys())
-        logger.info(f"Generating {num_chars} characters, avoiding these names: {names2avoid}")
-        char_gen_msgs = gen_human_char_msgs(game_lore, kingdom_name, town_name,
-                                            num_chars, char_description, names2avoid)
-        self.char_gen_params['characters'] = char_gen_msgs
+        logger.info(f"Generating 1 character, avoiding names: {names2avoid}")
 
-        # pop the non-llm-client related kwargs:
-        for _item in ['char_desc_struct', 'num_chars', 'kingdom_name', 'town_name']:
-            try:
-                _ = kwargs.pop(_item)
-            except Exception as E:
-                pass
+        char_gen_msgs = gen_human_char_msgs(
+            game_lore, kingdom_name, town_name, num_chars=1, avoid_names=names2avoid
+        )
+        self.char_gen_params["characters"] = char_gen_msgs
+
+        # Extract client kwargs (remove non-client parameters)
+        client_kw = {
+            k: v
+            for k, v in kwargs.items()
+            if k not in ["char_desc_struct", "num_chars", "kingdom_name", "town_name"]
+        }
 
         try:
-            raw_response = self.client.chat(char_gen_msgs, **kwargs)
+            response = generate_with_retry(
+                client=self.client,
+                messages=char_gen_msgs,
+                response_model=CharacterModel,
+                max_retries=max_retries,
+                fallback_value=_get_default_character(),
+                component_name="Human Character",
+                temperature_cooldown_step=self.temp_cooldown_step,
+                temperature_min=self.temp_min,
+                **client_kw,
+            )
+
+            # Convert to dict (already done by generate_with_retry via model_dump())
+            char_data = response["message"]
+
+            # Convert inventory list to string for lore storage
+            if isinstance(char_data.get("inventory"), list):
+                char_data["inventory"] = ", ".join(char_data["inventory"])
+
+            character_name = char_data["name"]
+            logger.info(
+                f"Human Character generated: {character_name}, age={char_data['age']}, money={char_data['money']}"
+            )
+
+            return {character_name: char_data}
+
         except Exception as e:
-            logger.error(f"Failed to receive LLM response\"{e}\"")
-            raise ValueError(f"Failed to receive LLM response\"{e}\"")
+            logger.error(f"Failed to generate human character: {e}")
+            # Return fallback character
+            fallback = _get_default_character().model_dump()
+            fallback["inventory"] = ", ".join(fallback["inventory"])
+            logger.info(f"Using fallback character: {fallback['name']}")
+            return {fallback["name"]: fallback}
 
-        if char_description is None:
-            expected_flds = self.DEF_H_CHAR_FLDS
-        else:
-            expected_flds = set(char_description.keys())
+    def __gen_antagonist(self, game_lore: Dict[str, str], **kwargs) -> Dict[str, Any]:
+        """Generates ONE antagonist using structured output"""
 
-        char_desc_str = raw_response['message']
-        characters = {}
-        try:
-            characters = parse_character(char_desc_str, expected_flds)
-        except Exception as e:
-            logger.warning(f"Error while parsing character generation response with error \"{e}\"")
-
-        return characters
-
-
-    def __gen_antagonist(self, game_lore: Dict[str, str],**kwargs) -> Dict[str, str]:
-        """
-
-        :param game_lore: Dict with all generated game lore
-        :param kwargs:
-            player_desc: a dictionary with description of the human player
-            kingdom_name: kingdom where the antagonist acts/starts/etc
-            antag_desc: a dictionary with instructions, if not provided, default will be used
-         :return: messages (aka list of dictionaries)
-
-        """
-        human_desc = kwargs.get('player_desc', None)
+        human_desc = kwargs.get("player_desc", None)
         k_name = kwargs.get("kingdom_name", None)
-        antag_desc = kwargs.get("antag_desc", None)
+        max_retries = kwargs.pop("max_retries", 3)
 
         if input_not_ok(human_desc, dict, {}):
             logger.error(f"Description of a human player can't be empty or None")
             raise ValueError(f"Description of a human player can't be empty or None")
 
-        if input_not_ok(k_name, str, ''):
+        if input_not_ok(k_name, str, ""):
             logger.error(f"Kingdom name can't be empty or None")
             raise ValueError(f"Kingdom name can't be empty or None")
 
-        if input_not_ok(antag_desc, dict, {}):
-            logger.info(f"Using default for antagonist description")
-            antag_desc = ANTAGONIST_DESC
-            expected_flds = self.DEF_A_CHAR_FLDS
-        else:
-            expected_flds = set(antag_desc.keys)
+        msgs2gen = gen_antagonist_msgs(game_lore, human_desc, k_name, num_chars=1)
+        self.char_gen_params["antagonists"] = msgs2gen
 
-        msgs2gen = gen_antagonist_msgs(game_lore, human_desc, k_name,1, antag_desc)
-        self.char_gen_params['antagonists'] = msgs2gen
-
-        # pop the non-llm-client related kwargs:
-        for _item in ['player_desc', 'kingdom_name', 'antag_desc']:
-            try:
-                _ = kwargs.pop(_item)
-            except Exception as E:
-                pass
+        # Extract client kwargs
+        client_kw = {
+            k: v
+            for k, v in kwargs.items()
+            if k not in ["player_desc", "kingdom_name", "antag_desc"]
+        }
 
         try:
-            raw_response = self.client.chat(msgs2gen, **kwargs)
-        except Exception as e:
-            logger.error(f"Failed to receive LLM response\"{e}\"")
-            raise ValueError(f"Failed to receive LLM response\"{e}\"")
+            response = generate_with_retry(
+                client=self.client,
+                messages=msgs2gen,
+                response_model=AntagonistModel,
+                max_retries=max_retries,
+                fallback_value=_get_default_antagonist(),
+                component_name="Antagonist",
+                temperature_cooldown_step=self.temp_cooldown_step,
+                temperature_min=self.temp_min,
+                **client_kw,
+            )
 
-        ans = {}
-        try:
-            ans = parse_antagonist(raw_response['message'], expected_flds)
-        except Exception as e:
-            logger.warning(f"Could not part the LLm response with \"{e}\"")
+            char_data = response["message"]
+            antagonist_name = char_data["name"]
+            logger.info(f"Antagonist generated: {antagonist_name}")
 
-        return ans
+            return {antagonist_name: char_data}
+
+        except Exception as e:
+            logger.error(f"Failed to generate antagonist: {e}")
+            fallback = _get_default_antagonist().model_dump()
+            logger.info(f"Using fallback antagonist: {fallback['name']}")
+            return {fallback["name"]: fallback}

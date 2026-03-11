@@ -25,8 +25,11 @@ from llm_rpg.gui.chat2 import ChatInterface as ChatInterface2
 from llm_rpg.engine.game_ai import GameAI
 
 # ----- Some testing flags -----
-TEST_MAIN_MENU = False
-TEST_GAME_AI = True
+TEST_MAIN_MENU = True
+
+TEST_GAME_AI = False
+row_num = 1
+
 TEST_CHAT2 = False
 TEST_CHAT1 = False
 
@@ -162,7 +165,6 @@ if __name__ == "__main__":
 
     if TEST_GAME_AI:
         logger.info(f"Loading the game")
-        row_num = 6
         _row = game_io.games.iloc[row_num-1]
         game_id = _row["id"]
         game_folder = _row["folder"]

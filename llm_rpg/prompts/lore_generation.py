@@ -2,8 +2,16 @@
 Collection of prompts to generate the world and the lore
 """
 
+from .response_models import (
+    WorldRulesModel,
+    NPCBehaviorRulesModel,
+    KingdomsModel,
+    KingdomData,
+)
 from ..utils.helpers import dict_2_str
 import logging
+import random
+
 logger = logging.getLogger(__name__)
 
 from typing import Dict, List, Set, Any, Optional
@@ -13,16 +21,6 @@ from typing import Dict, List, Set, Any, Optional
 # default descriptions
 # instructions to generate a kingdom
 # these will be transferred to the LLMs
-KINGDOM_DESC_STRUCT= {
-    "history": "brief history of the kingdom, (1 sentence, 10 words)",
-    "type": "one of the kingdom generic descriptions, one word",
-    "location": "up to 1 sentence",
-    "political_system": "up to five words",
-    "national_wealth": "up to ten words",
-    "international": "interaction with neighbors (include for each kingdom), up to one sentence, 10 words",
-}
-
-
 # instructions to generate a town in a kingdom
 TOWNS_DESC_STRUCT = {
     "history": "brief history of the town, (1 sentence, max 10 words)",
@@ -62,7 +60,7 @@ Rules for inventory:
 - Forbidden materials for weapons: bones, wood, silver, gold, copper, bronze
 - All inventory elements must fit the goal of the character
 - No garments and clothing
-- List all items comma separated; never use 'and' """
+- List all items comma separated; never use 'and' """,
 }
 
 
@@ -95,7 +93,7 @@ Return empty string if not applicable, otherwise 1 sentence.",
     "strength": "if applicable, provide your estimate of strength of this object, \
 e.g weak, moderate, strong, anything else suitable. This is applicable \
 if only the object can be used for battle, healing, casting spells, \
-travelling, consumed as food or drinks; for anything else - it is not applicable"
+travelling, consumed as food or drinks; for anything else - it is not applicable",
 }
 
 
@@ -110,37 +108,6 @@ what's happening till it's too late.
 are known for mass production and highly educated people. Their armies are strong and fearsome, but they \
 are not interested in conquests, they want trade and earn money."""
 
-
-# World descriptions
-# Inspired by Terry Pratchett
-world_desc_discworld = """This is Discworld similar to one of Terry Pratchett's one. \
-This is a flat world. Sun orbits around the disc. There are long summers and \
-long and harsh winters. The center region of the Discworld has no seas and oceans, \
-it's dry and deserted. The outer part has seas and oceans. They make the climate mild.
-
-The world is full of magic. There are natural sources of wild magic. Weird things \
-happen there, e.g. a reverse pyramid. Humans domesticated magic, and these people \
-are magicians. 
-
-Light travels very slowly when meets a strong magical field. There is a special color \
-for magic: octarine.
-
-The world is populated by different fairy creatures, such as elves, goblins, trolls, \
-dragons. 
-
-Many gods rule over the world. They are lazy, self-centered, and do not care much about \
-creatures living on the Discworld. Occasionally they intervene, but things never go well \
-when the do it."""
-
-# Something grim, work in progress
-world_desc_default = """- This is fantasy world where magic is strong.
-- The world is inherently unfriendly place.
-- Climate is good in the South, but more northern regions are harsher.
-- The world has long winters and summers, which change relatively fast.
-- Many creatures are indifferent to humans, but some are very unfriendly.
-- The world is populated with humans, elves, trolls, goblins, dragons.
-- Gods are present, but they are lazy, self-centered, arrogant, and cruel. The gods are not very powerful.
-- There several large continents, but people have very vague knowledge of other continents."""
 ########################################################################################################################
 # Set of default prompts
 
@@ -172,79 +139,98 @@ Instructions:
 
 # A system prompt to describe objects based on instructions
 # Used in ObjectDescriptor class
-OBJ_ESTIMATOR_SYS_PROMPT = """You are an AI Game engine. \
+OBJ_ESTIMATOR_SYS_PROMPT = """You are an AI Game engine. 
 Your task is to describe these properties of a game object:
 - name
-- description
 - type
-- working principles if applicable
-- strength if applicable
+- description
+- action (how it works)
+- strength
 
-Your response follows these generic rules:
-- short and concise
-- only text
-- you never add anything from yourself
-- you carefully follow instruction in your task
-- correct spelling errors
-- maximum 5 words for each response
+Your response must be valid JSON with this exact structure:
+{
+  "name": "object name (1-2 words)",
+  "type": "armor|weapon|food|drink|magical item|document|book|clothing|medical|tool|other",
+  "description": "brief description or empty string",
+  "action": "how it works or empty string",
+  "strength": "weak|moderate|strong or empty string"
+}
 
-Return a valid JSON"""
+Rules:
+- Short and concise (max 5 words per field)
+- Only return valid JSON, no markdown or extra text
+- Correct spelling errors in the object name
+- Follow task instructions for each field"""
+
+
 ########################################################################################################################
-def gen_world_rules_msgs(num_rules: int,
-                         world_type: str= "fantasy",
-                         kind: str="dark") -> List[Dict[str, str]]:
+def gen_world_rules_msgs(
+    num_rules: int, world_type: str = "fantasy", kind: str = "dark"
+) -> List[Dict[str, str]]:
     """
-    Generates world description used to generate the shorter world description shown to the player.
-    :param num_rules: int -- number of the descriptors to generate
-    :param kind:
-    :return:
-    """
-    global WORLD_RULES_GEN_SYS_PRT
+    Generates user prompt for structured world rules generation.
 
-    if world_type.lower() == 'fantasy':
-        world_types = {
-            "dark": f"""Create world description for a fantasy world. \
-This world is miserable, depressing, unfair, where ordinary people struggle and the few have everything.
-Blend attributes of:
-- Lord Of The Rings
-- Norse and slavic mythology
-- Game of Thrones
-Avoid: eternal twilight, eternal night, eternal rain, etc.
-Provide a list of total {num_rules} in a plain text.""",
-            "neutral": f"""Create a world description for a typical fantasy world, similar to Dungeons and Dragons.
-Provide a list of total {num_rules} in a plain text.""",
-            "funny": f"""Create a humorous fantasy world in a style of Discworld of Terry Pratchett.
-Provide a list of total {num_rules} in a plain text."""
+    The system prompt with Pydantic schema is added automatically by struct_output().
+
+    :param num_rules: Number of rules per category (3-5 recommended)
+    :param world_type: 'fantasy' or 'sci-fi'
+    :param kind: 'dark', 'neutral', or 'funny'
+    :return: User message (system message added by struct_output)
+    """
+    if world_type.lower() not in ["sci-fi", "fantasy"]:
+        raise ValueError(
+            f"World type '{world_type}' is not recognized! Expected 'sci-fi' or 'fantasy'"
+        )
+
+    inspirations = {}
+    if world_type.lower() == "fantasy":
+        inspirations = {
+            "dark": """Blend: Lord of the Rings darkness, Norse mythology harshness, 
+            Game of Thrones political complexity. Avoid: eternal twilight/rain.""",
+            "neutral": "Classic Dungeons & Dragons fantasy with balanced good vs evil.",
+            "funny": "Terry Pratchett Discworld humor with absurd but logical magic.",
+        }
+    elif world_type.lower() == "sci-fi":
+        inspirations = {
+            "dark": """Blend: Cyberpunk 2077 dystopia, 1984 oppression, Altered Carbon 
+            inequality, Star Wars imperial tyranny.""",
+            "neutral": "Star Wars or Mass Effect style space opera with exploration.",
+            "funny": "Futurama-style humor with absurd technology and bureaucracy.",
         }
 
-    if world_type.lower() == 'sci-fi':
-        world_types = {
-            "dark": f"""Create world description for a sci-fi world. \
-This world is miserable, depressing, unfair, where ordinary people struggle and the few have everything.
-Blend attributes of:
-- Star Wars
-- Cyberpunk 2077
-- Altered Carbon
-- 1984
+    if kind not in inspirations:
+        raise ValueError(
+            f"World kind '{kind}' is not recognized! Expected {list(inspirations.keys())}"
+        )
 
-Provide a list of total {num_rules} in a plain text.""",
-            "neutral": f"""Create a world description for a typical sci-fi world, similar to Star Wars or Mass Effect.
-Provide a list of total {num_rules} in a plain text.""",
-            "funny": f"""Create a humorous sci-fi world in a style of Futurama TV series.
-Provide a list of total {num_rules} in a plain text."""
-        }
+    inspiration = inspirations[kind]
 
-    if world_type.lower() not in ['sci-fi', 'fantasy']:
-        raise ValueError(f"World type is {world_type} is not recognized! Expected {['sci-fi', 'fantasy']}")
+    user_prompt = f"""Create comprehensive world rules for a {kind} {world_type} setting.
 
-    if kind not in world_types.keys():
-        raise ValueError(f"World type is {kind} is not recognized! Expected {list(world_types.keys())}")
+WORLD INSPIRATION: {inspiration}
 
-    return [{"role": "system", "content": WORLD_RULES_GEN_SYS_PRT},
-            {"role": "user", "content": world_types[kind]}]
+Generate exactly {num_rules} rules per category (each rule 10-15 words).
+
+Rules must be:
+- Specific and actionable (not abstract)
+- Internally consistent across categories
+- Useful for steering gameplay and NPC behavior
+- Written in clear, concise language
+
+Example format:
+{{
+  "MAGIC": [
+    "Magic channels through crystal deposits found in mountain ranges across the continent",
+    "Prolonged spellcasting drains life force requiring rest or restorative potions"
+  ],
+  ...
+}}
+"""
+
+    return [{"role": "user", "content": user_prompt}]
 
 
-def gen_world_msgs(world_desc:str) -> List[Dict[str, str]]:
+def gen_world_msgs(world_desc: str) -> List[Dict[str, str]]:
     """
     Returns a prompt to generate world description.
 
@@ -267,51 +253,55 @@ World Description: <WORLD DESCRIPTION>"""
 
     return [
         {"role": "system", "content": LORE_GEN_SYS_PRT},
-        {"role": "user", "content": world_prompt}
+        {"role": "user", "content": world_prompt},
     ]
 
 
-def gen_kingdom_msgs(num_kingdoms:int,
-                     kingdoms_traits:str,
-                     world:Dict[str,str]) -> List[Dict[str, str]]:
+def gen_kingdom_msgs(
+    num_kingdoms: int, kingdoms_traits: str, world: Dict[str, str]
+) -> List[Dict[str, str]]:
     """
-    Returns a prompt to generate kingdoms
+    Returns user prompt for structured kingdom generation.
 
-    :param num_kingdoms: int number of kingdoms to generate
-    :param kingdoms_traits: str traits/description of kingdoms
-    :param world: world description
-    :return:
+    System prompt with Pydantic schema is added automatically by struct_output().
+
+    :param num_kingdoms: Number of kingdoms to generate
+    :param kingdoms_traits: Description of kingdom type options
+    :param world: World description dict with 'name' and 'description' keys
+    :return: User message for structured output (system added by struct_output)
     """
-    global LORE_GEN_SYS_PRT
-
     if num_kingdoms < 1:
-        logger.warning(f"Expected \"num_kingdoms\">=1, got {num_kingdoms}. Set \"num_kingdoms\"=1!")
+        logger.warning(f'Expected "num_kingdoms">=1, got {num_kingdoms}. Set to 1!')
         num_kingdoms = 1
 
-    s = ""
-    for i in range(num_kingdoms):
-        s += f"""Kingdom {i + 1}: <kingdom name>\n"""
-        for fld, val in KINGDOM_DESC_STRUCT.items():
-            s += f"{fld}: {val}\n"
-        s += '\n'
+    user_prompt = f"""Create {num_kingdoms} unique kingdoms for this fantasy world.
 
-    kingdoms_prompt = f"""Create a brief outline of {num_kingdoms} different kingdoms \
-for a fantasy world. This is the actual world:
-World Name: {world['name']}
-World Description: {world['description']}
+WORLD CONTEXT:
+World Name: {world["name"]}
+World Description: {world["description"]}
 
-Follow these kingdom generic descriptions:
+KINGDOM TYPE OPTIONS:
 {kingdoms_traits}
-For each kingdom choose randomly several traits from the above and mix them. \
-Never add anything from yourself, just what is asked. \
-Avoid "Here are the three kingdoms:" and etc.
 
-It is very important that your output strictly follows this template:
-{s}"""
+Instructions:
+1. Create exactly {num_kingdoms} kingdoms
+2. Each kingdom should blend 2-3 traits from the options above
+3. Kingdoms should be diverse and complementary (not all same type)
+4. Ensure geographical locations make sense within the world description
+5. International relations should reference other generated kingdoms
 
-    return [
-        {"role": "system", "content": LORE_GEN_SYS_PRT},
-        {"role": "user", "content": kingdoms_prompt}]
+For each kingdom provide:
+- **name**: Unique, memorable fantasy name (1-3 words)
+- **history**: Brief founding story (1 sentence, ~10 words)
+- **type**: Primary characteristic (magic/militaristic/diplomatic/technology)
+- **location**: Where it sits in the world (up to 1 sentence)
+- **political_system**: Government type (max 5 words)
+- **national_wealth**: Economic status (max 10 words)
+- **international**: Relations with neighbors (~10 words)
+
+Output as JSON array of kingdom objects matching the KingdomsModel schema."""
+
+    return [{"role": "user", "content": user_prompt}]
 
 
 def gen_towns_msgs(num_towns, world, kingdoms, kingdom_name) -> List[Dict[str, Any]]:
@@ -324,7 +314,7 @@ def gen_towns_msgs(num_towns, world, kingdoms, kingdom_name) -> List[Dict[str, A
     lst_kings = [x for x in kingdoms if x != kingdom_name]
 
     if num_towns < 1:
-        logger.warning(f"Expected \"num_towns\">=1, got {num_towns}. Set \"num_towns\"=1!")
+        logger.warning(f'Expected "num_towns">=1, got {num_towns}. Set "num_towns"=1!')
         num_towns = 1
 
     t_templ = ""
@@ -333,127 +323,193 @@ def gen_towns_msgs(num_towns, world, kingdoms, kingdom_name) -> List[Dict[str, A
         for fld, val in TOWNS_DESC_STRUCT.items():
             t_templ += f"{fld}: {val}\n"
         t_templ += f"avoid these names: {', '.join(lst_kings)}\n"
-        t_templ += '\n'
+        t_templ += "\n"
 
     town_prompt = f"""Use this information of about the world
-World Name: {world['name']}
-World Description: {world['description']}
+World Name: {world["name"]}
+World Description: {world["description"]}
 and the kingdom: 
 {dict_2_str(kingdoms[kingdom_name])}
 
 to create {num_towns} different towns for a fantasy kingdom and world using this template:
 {t_templ}"""
 
-    return [{"role": "system", "content": LORE_GEN_SYS_PRT},
-            {"role": "user", "content":  town_prompt}]
-
-
-def gen_human_char_msgs(game_lore: Dict[str, Any],
-                        kingdom_name: str,
-                        town_name: str,
-                        num_chars: int,
-                        char_description: Optional[Dict[str, str] | None] = None,
-                        avoid_names: List[str] = []) -> List[Dict[str, Any]]:
-    """
-    Generates messages to create player's character
-    :param num_chars: number of characters to generate
-    :param avoid_names: list (if any) names banned from usage
-    :param kingdom_name: dictionary with description of the kingdom
-                    where the human character is created
-    :param town_name: town
-    :param char_description: optional, a dictionary with character description.
-    :return:
-    """
-    global  LORE_GEN_SYS_PRT, CHAR_DESC_STRUCT
-    if not char_description or (char_description != {} and type(char_description) != dict):
-        char_description = CHAR_DESC_STRUCT
-        logger.info(f"Using default description")
-
-    # a character must have own goal in the game
-    if 'goal' not in char_description:
-        char_description.update({'goal':CHAR_DESC_STRUCT['goal']})
-
-    if num_chars < 1:
-        logger.warning(f"Expected \"num_chars\">=1, got {num_chars}. Set \"num_chars\"=1!")
-        num_chars = 1
-
-    char_str = ""
-    for i in range(num_chars):
-        char_str += f"name{i + 1}: character's name\n"
-        for fld, val in char_description.items():
-            char_str += f"{fld}: {val}\n"
-        char_str += '\n'
-
-    char_instruct = f"""Create {num_chars} characters based on the world, kingdom \
-and town the character is in. Describe the character's appearance and \
-profession, as well as their deeper pains and desires.
-
-World Name: {game_lore['world']['name']}
-World Description: {game_lore['world']['description']}
-
-The kingdom: {dict_2_str(game_lore['kingdoms'][kingdom_name])}
-
-The town: {dict_2_str(game_lore['towns'][kingdom_name][town_name])}
-
-Your response must follow these instructions:
-{char_str}
-"""
-
-    if avoid_names and avoid_names != []:
-        char_instruct += f"You may not to use these names: {', '.join(avoid_names)}"
-
-    return [{'role': 'system', 'content': LORE_GEN_SYS_PRT},
-            {'role': 'user', 'content': char_instruct}]
-
-
-def gen_antagonist_msgs(game_lore: Dict[str, Any],
-                        player_desc: Dict[str, str],
-                        kingdom_name: str,
-                        num_chars: int = 1,
-                        antag_desc=None) -> List[Dict[str, Any]]:
-    global ANTAGONIST_DESC, LORE_GEN_SYS_PRT
-
-    if not antag_desc or (antag_desc != {} and type(antag_desc) != dict):
-        antag_desc = ANTAGONIST_DESC
-        logger.info(f"Using default description")
-
-    char_str = ""
-    for i in range(max(num_chars, 1)):
-        char_str += f"name{i + 1}: character's name\n"
-        for fld, val in antag_desc.items():
-            if fld == 'goal' and 'goal' in player_desc:
-                char_str += f"{fld}: {val}. The player's goal: {player_desc['goal']}\n"
-            else:
-                char_str += f"{fld}: {val}\n"
-        char_str += '\n'
-
-    antag_char_prompt = f"""Create an antagonist to a human character based on the world description:
-World Name: {game_lore['world']['name']}
-World Description: {game_lore['world']['description']}
-
-The human player: 
-{dict_2_str(player_desc)}
-
-The antagonist is a ruler or a significant person of {kingdom_name}. This is description of the kingdom:
-{dict_2_str(game_lore["kingdoms"][kingdom_name])}
-
-Create your response based on these guidelines:
-{char_str}
-"""
-
     return [
-        {'role': 'system', 'content': LORE_GEN_SYS_PRT},
-        {'role': 'user', 'content': antag_char_prompt}
+        {"role": "system", "content": LORE_GEN_SYS_PRT},
+        {"role": "user", "content": town_prompt},
     ]
 
 
-def gen_condition_end_game(game_lore: Dict[str, Any],
-                           player_desc: Dict[str, str],
-                           antagonist_desc: Dict[str, str],
-                           human_loc: str,
-                           antag_loc: str,
-                           num_conditions: int,
-                           condition: str) -> List[Dict[str, str]]:
+def gen_human_char_msgs(
+    game_lore: Dict[str, Any],
+    kingdom_name: str,
+    town_name: str,
+    num_chars: int = 1,
+    char_description: Optional[Dict[str, str]] = None,
+    avoid_names: List[str] = [],
+) -> List[Dict[str, Any]]:
+    """Generates messages to create ONE player's character"""
+
+    if num_chars != 1:
+        logger.warning(
+            f"Expected num_chars=1 for structured output, got {num_chars}. Generating 1."
+        )
+        num_chars = 1
+
+    # Generate random bounds for this character
+    age_min = random.randint(18, 30)
+    age_max = random.randint(age_min + 10, age_min + 40)
+    money_min = random.randint(100, 400)
+    money_max = random.randint(money_min + 200, 1000)
+
+    world_type = game_lore.get("world", {}).get("type", "fantasy")
+
+    user_prompt = f"""Create ONE original character based on the world, kingdom and town settings.
+
+World Name: {game_lore["world"]["name"]}
+World Description: {game_lore["world"]["description"]}
+
+The kingdom: {dict_2_str(game_lore["kingdoms"][kingdom_name])}
+The town: {dict_2_str(game_lore["towns"][kingdom_name][town_name])}
+
+Character should include:
+- A unique name (1-3 words) NOT in this banned list: {", ".join(avoid_names) if avoid_names else "none"}
+- Gender: male or female only
+- Occupation appropriate for a {world_type} world
+- Age between {age_min} and {age_max} years
+- 1-2 sentence backstory
+- Emotional wounds (up to 10 words)
+- Deepest motivations (up to 10 words)
+- An epic goal that drives the story forward
+- Physical attributes (strength, dexterity, endurance)
+- Mental attributes (intelligence, wisdom)
+- Communication style (5 words max)
+- Notable strengths (up to 10 words)
+- Notable weaknesses (up to 10 words)
+- Starting gold between {money_min} and {money_max} coins
+- Logical starting inventory (functional item names, 1-2 words each, max 10 items)
+
+The character's occupation should match the world setting. Inventory items must be logical for their profession and goals."""
+
+    return [
+        {"role": "system", "content": LORE_GEN_SYS_PRT},
+        {"role": "user", "content": user_prompt},
+    ]
+
+
+def gen_antagonist_msgs(
+    game_lore: Dict[str, Any],
+    player_desc: Dict[str, str],
+    kingdom_name: str,
+    num_chars: int = 1,
+    antag_desc=None,
+) -> List[Dict[str, Any]]:
+    """Generates messages to create ONE antagonist"""
+
+    if num_chars != 1:
+        logger.warning(
+            f"Expected num_chars=1 for structured output, got {num_chars}. Generating 1."
+        )
+        num_chars = 1
+
+    # Generate random age bounds for antagonist (same logic as characters)
+    age_min = random.randint(18, 30)
+    age_max = random.randint(age_min + 10, age_min + 40)
+
+    user_prompt = f"""Create ONE antagonist who opposes the human player in this world.
+
+World Name: {game_lore["world"]["name"]}
+World Description: {game_lore["world"]["description"]}
+
+The human player:
+{dict_2_str(player_desc)}
+
+The kingdom: {dict_2_str(game_lore["kingdoms"][kingdom_name])}
+
+The antagonist should include:
+- A unique name (1-3 words)
+- Occupation as a ruler or significant person in {kingdom_name}
+- Age between {age_min} and {age_max} years
+- 1-2 sentence backstory explaining their rise to power/influence
+- An epic goal that DIRECTLY contradicts the player's goal: "{player_desc.get("goal", "unknown")}"
+- Notable advantages (up to 10 words)
+- Exploitable vulnerabilities (up to 10 words)
+- Physical attributes (1 sentence)
+- Mental attributes (1 sentence)
+- Social abilities (5 words max)
+
+The antagonist's goal must be in clear contradiction to the player's goal. They should be a worthy opponent."""
+
+    return [
+        {"role": "system", "content": LORE_GEN_SYS_PRT},
+        {"role": "user", "content": user_prompt},
+    ]
+
+
+def gen_npc_character_msgs(
+    game_lore: Dict[str, Any],
+    kingdom_name: str,
+    town_name: str,
+    npc_occupation: str,
+    npc_goal: str,
+    avoid_names: List[str] = [],
+) -> List[Dict[str, Any]]:
+    """Generates messages to create ONE NPC character"""
+
+    # Generate random bounds for this NPC
+    age_min = random.randint(18, 30)
+    age_max = random.randint(age_min + 10, age_min + 40)
+    money_min = random.randint(100, 400)
+    money_max = random.randint(money_min + 200, 1000)
+
+    world_type = game_lore.get("world", {}).get("type", "fantasy")
+
+    user_prompt = f"""Create ONE NPC character who is a {npc_occupation} in the given kingdom and town.
+
+World Name: {game_lore["world"]["name"]}
+World Description: {game_lore["world"]["description"]}
+
+The kingdom: {dict_2_str(game_lore["kingdoms"][kingdom_name])}
+The town: {dict_2_str(game_lore["towns"][kingdom_name][town_name])}
+
+NPC Context:
+- Occupation: {npc_occupation}
+- Goal: {npc_goal}
+
+The NPC should include:
+- A unique name (1-3 words) NOT in this banned list: {", ".join(avoid_names) if avoid_names else "none"}
+- Gender: male or female only
+- Occupation: {npc_occupation}
+- Age between {age_min} and {age_max} years
+- 1-2 sentence backstory related to their occupation
+- Emotional wounds (up to 10 words)
+- Deepest motivations (up to 10 words)
+- Goal: {npc_goal}
+- Physical attributes (strength, dexterity, endurance)
+- Mental attributes (intelligence, wisdom)
+- Communication style (5 words max)
+- Strong points related to occupation
+- Weak points (up to 10 words)
+- Starting gold between {money_min} and {money_max} coins
+- Logical starting inventory for their occupation (functional item names, 1-2 words each, max 10 items)
+
+The character should fit the {npc_occupation} role logically. Inventory items should match their occupation and goal."""
+
+    return [
+        {"role": "system", "content": LORE_GEN_SYS_PRT},
+        {"role": "user", "content": user_prompt},
+    ]
+
+
+def gen_condition_end_game(
+    game_lore: Dict[str, Any],
+    player_desc: Dict[str, str],
+    antagonist_desc: Dict[str, str],
+    human_loc: str,
+    antag_loc: str,
+    num_conditions: int,
+    condition: str,
+) -> List[Dict[str, str]]:
     """
     Generates messages to create conditions to win or loose the game
 
@@ -476,19 +532,21 @@ This player is against this antagonist:
 {antagonist_desc}
 
 These characters act in this world:
-World Name: {game_lore['world']['name']}
-World Description: {game_lore['world']['description']}
+World Name: {game_lore["world"]["name"]}
+World Description: {game_lore["world"]["description"]}
 
 Players kingdom:
-{game_lore['kingdoms'][human_loc]}
+{game_lore["kingdoms"][human_loc]}
 
 Antagonist's kingdom:
-{game_lore['kingdoms'][antag_loc]}
+{game_lore["kingdoms"][antag_loc]}
 
 Provide only a numbered list without any additional words"""
 
-    return [{'role': 'system', 'content': LORE_GEN_SYS_PRT},
-            {'role': 'user', 'content': conditions_prt}]
+    return [
+        {"role": "system", "content": LORE_GEN_SYS_PRT},
+        {"role": "user", "content": conditions_prt},
+    ]
 
 
 def gen_obj_est_msgs(obj: str) -> List[Dict[str, str]]:
@@ -499,48 +557,95 @@ def gen_obj_est_msgs(obj: str) -> List[Dict[str, str]]:
     """
     global OBJ_ESTIMATOR_SYS_PROMPT, OBJECT_DESC
 
-    task = f"""Describe the given object: {obj} following these additional instructions:\n"""
+    task = f"""Describe this game object: {obj}
 
-    task += f"""name: provide name of the object {obj}. Remove articles. Shorten the name to 1-2 word: \
-1) long wooden spear->spear 2) battle axe->axe 3) steel greatsword->greatsword"""
+Required JSON output format:
+{{
+  "name": "<shortened name, 1-2 words, no articles>",
+  "type": "<one of: armor, weapon, food, drink, magical item, document, book, clothing, medical, tool, other>",
+  "description": "<brief description or empty string if not applicable>",
+  "action": "<how it works or empty string if not applicable>",
+  "strength": "<weak/moderate/strong estimate or empty string if not applicable>"
+}}
 
-    for key, inst in OBJECT_DESC.items():
-        task += f"{key}: {inst}\n"
+Name rules: Remove articles and shorten to 1-2 words. Examples:
+- "long wooden spear" -> "spear"
+- "battle axe" -> "axe"  
+- "steel greatsword" -> "greatsword"
 
-    return [{"role": "system", "content": OBJ_ESTIMATOR_SYS_PROMPT},
-            {"role": "user", "content": task}]
+Additional field instructions:
+{dict_2_str(OBJECT_DESC)}
+
+Return only valid JSON, no markdown formatting."""
+
+    return [
+        {"role": "system", "content": OBJ_ESTIMATOR_SYS_PROMPT},
+        {"role": "user", "content": task},
+    ]
 
 
-def gen_npc_behavior_rules(npc:Dict[str, str],
-                           num_rules:int=5) -> List[Dict[str, str]]:
+def gen_npc_behavior_rules(
+    npc: Dict[str, str], num_rules_per_category: int = 3
+) -> List[Dict[str, str]]:
     """
-    Generates behavioral rules and principles for an NPC. These will be used later
-    to model NPC's actions and interaction with the world and the human player.
-    :param npc:
-    :param num_rules:
-    :return:
+    Generates user prompt for structured NPC behavioral rules.
+
+    The system prompt with Pydantic schema is added automatically by struct_output().
+
+    :param npc: Character description dictionary (name, goal, biography, etc.)
+    :param num_rules_per_category: Rules per situational category (3-5 recommended)
+    :return: User message for LLM (system added by struct_output)
     """
-    npc_behavior_task = f"""Generate list of {num_rules} behavioral traits for this NPC:
-    {npc}
+    import json
 
-These traits will be used by a game master to predict behavior of the NPC and its interaction with \
-other characters. Your response will be used by another AI/LLM model to generate the character's \
-actions in the game or response to the human player.
+    user_prompt = f"""Generate behavioral rules for this NPC based on their character:
 
-Respond with the numbered list only of 3-5 words each."""
+{json.dumps(npc, indent=2)}
 
-    return [{'role': 'system', 'content': LORE_GEN_SYS_PRT},
-            {'role': 'user', 'content': npc_behavior_task}]
+Create exactly {num_rules_per_category} rules per category (each rule 10-15 words).
+
+Rules must be:
+- Specific actionable directives (not vague principles)
+- Consistent with the NPC's goals, desires, and personality
+- Useful for guiding AI decision-making in gameplay
+- Different across categories (combat vs social vs moral, etc.)
+
+Example rule quality:
+❌ Bad: "Always help the weak" (too vague)
+✅ Good: "Protect innocent civilians from harm even when it delays personal objectives temporarily"
+
+Base rules on the NPC's:
+- occupation (warrior fights differently than magician)
+- goal (epic objective shapes priorities)
+- deeper_desires and deeper_pains (emotional drivers)
+- strengths and weaknesses (realistic capabilities)
+
+Output must be valid JSON with this exact structure:
+{{
+  "COMBAT": ["rule1", "rule2", "rule3"],
+  "NEGOTIATION": ["rule1", "rule2", "rule3"],
+  "EXPLORATION": ["rule1", "rule2", "rule3"],
+  "SOCIAL": ["rule1", "rule2", "rule3"],
+  "MORAL": ["rule1", "rule2", "rule3"],
+  "GENERAL": ["rule1", "rule2", "rule3"]
+}}
+
+Each category must contain exactly {num_rules_per_category} rules as strings in a list.
+"""
+
+    return [{"role": "user", "content": user_prompt}]
 
 
-def gen_entry_point_msg(world_desc,
-                        human_player,
-                        human_start_k,
-                        k_desc,
-                        human_start_t,
-                        t_desc,
-                        npcs_desc,
-                        npc_start_location):
+def gen_entry_point_msg(
+    world_desc,
+    human_player,
+    human_start_k,
+    k_desc,
+    human_start_t,
+    t_desc,
+    npcs_desc,
+    npc_start_location,
+):
     """
     Messages to generate the starting point
 
@@ -583,5 +688,188 @@ Follow these instructions:
 - mention location of player's allies (if known)
 - Write always in third person language"""
 
-    return [{'role': 'system', 'content': LORE_GEN_SYS_PRT},
-            {'role': 'user', 'content': entry_point_prt}]
+    return [
+        {"role": "system", "content": LORE_GEN_SYS_PRT},
+        {"role": "user", "content": entry_point_prt},
+    ]
+
+
+def _get_default_world_rules() -> WorldRulesModel:
+    """Return default world rules for fallback"""
+    return WorldRulesModel(
+        MAGIC=[
+            "Magic exists but is rare and difficult to master without proper training",
+            "Spellcasting requires verbal components and often material components",
+            "Powerful magic draws attention from authorities and rival mages",
+            "Magical items are valuable commodities traded by specialized merchants",
+        ],
+        PHYSICS=[
+            "The world follows standard physical laws with day and night cycles",
+            "Seasons change gradually affecting agriculture and travel conditions",
+            "Mountains create natural barriers between kingdoms and regions",
+            "Rivers serve as important trade routes and sources of fresh water",
+        ],
+        SOCIETY=[
+            "Kingdoms are ruled by monarchs advised by councils of nobles",
+            "Commoners have limited political power but form majority population",
+            "Merchant guilds influence economy and can sway local politics",
+            "Religious institutions hold significant social and moral authority",
+        ],
+        GEOGRAPHY=[
+            "Temperate climates dominate central regions suitable for agriculture",
+            "Northern territories are colder with harsher winters and shorter growing seasons",
+            "Coastal areas benefit from milder weather and maritime trade opportunities",
+            "Forests provide resources but harbor dangerous creatures and outlaws",
+        ],
+        TECHNOLOGY=[
+            "Metalworking produces quality weapons and armor for military use",
+            "Agricultural tools enable efficient farming supporting population growth",
+            "Transportation relies on horses, carriages, and sailing ships",
+            "Communication travels at speed of messengers on horseback or ship",
+        ],
+    )
+
+
+def _get_default_npc_rules() -> NPCBehaviorRulesModel:
+    """Return default NPC behavioral rules for fallback"""
+    return NPCBehaviorRulesModel(
+        COMBAT=[
+            "Assess the threat level before committing to direct engagement",
+            "Protect allies and maintain formation during group combat situations",
+            "Use available terrain and cover to gain tactical advantages",
+            "Disengage when outnumbered significantly or objectives are compromised",
+        ],
+        NEGOTIATION=[
+            "Listen carefully to understand the full request before responding",
+            "Seek mutually beneficial outcomes that advance personal goals",
+            "Maintain honesty while strategically revealing only necessary information",
+            "Walk away from deals requiring unethical or dangerous actions",
+        ],
+        EXPLORATION=[
+            "Move cautiously in unknown areas watching for hidden dangers",
+            "Document discoveries and share important findings with the party",
+            "Investigate unusual phenomena from safe distance before approaching",
+            "Conserve resources when venturing into uncharted territories",
+        ],
+        SOCIAL=[
+            "Treat others with basic respect regardless of social status",
+            "Remember names and details of important contacts for future reference",
+            "Build trust through consistent actions over time",
+            "Avoid revealing sensitive personal information to strangers",
+        ],
+        MORAL=[
+            "Protect innocent civilians from harm when possible without grave risk",
+            "Honor commitments made unless circumstances fundamentally change",
+            "Refuse requests that cause unjustified suffering to others",
+            "Act with integrity even when actions go unpunished",
+        ],
+        GENERAL=[
+            "Prioritize actions that advance long-term personal objectives",
+            "Consider consequences before taking irreversible actions",
+            "Adapt strategies when circumstances change unexpectedly",
+            "Maintain physical and mental readiness for challenges",
+        ],
+    )
+
+
+# Import CharacterModel and AntagonistModel for type hints
+from llm_rpg.prompts.response_models import CharacterModel, AntagonistModel
+
+
+def _get_default_character() -> CharacterModel:
+    """Return default character for fallback"""
+    return CharacterModel(
+        name="Adventurer",
+        gender="male",
+        occupation="warrior",
+        age=25,
+        biography="A seasoned fighter seeking glory and adventure.",
+        deeper_pains="Lost family to bandits years ago",
+        deeper_desires="Build a new life and protect the innocent",
+        goal="Defeat the dark lord threatening the kingdom",
+        physical="Strong and agile with above-average endurance",
+        mental="Practical thinker with good common sense",
+        communication="Direct speaker, struggles with diplomacy",
+        strengths="Skilled in combat tactics and weapon mastery",
+        weaknesses="Impulsive and distrustful of authority",
+        money=100,
+        inventory=["steel longsword", "chainmail vest", "healing potion"],
+    )
+
+
+def _get_default_antagonist() -> AntagonistModel:
+    """Return default antagonist for fallback"""
+    return AntagonistModel(
+        name="Dark Lord Malakor",
+        occupation="warlock king",
+        biography="An ancient sorcerer who seeks to plunge the world into eternal darkness.",
+        goal="Conquer all kingdoms and enslave humanity to serve his dark masters",
+        strengths="Mastery of forbidden magic and vast wealth",
+        weaknesses="Overconfident and underestimates mortal ingenuity",
+        physical="Ageless appearance with unnaturally strong constitution",
+        mental="Genius-level intellect but consumed by paranoia",
+        communication="Charismatic manipulator who inspires terror",
+    )
+
+
+def _get_default_npc_character() -> CharacterModel:
+    """Return default NPC character for fallback"""
+    return CharacterModel(
+        name="Villager",
+        gender="male",
+        occupation="merchant",
+        age=30,
+        biography="A local trader who knows everyone in town.",
+        deeper_pains="Lost his shop to a fire last winter",
+        deeper_desires="Restore his family's reputation and wealth",
+        goal="Help the hero while protecting his own interests",
+        physical="Average build with tired eyes from long nights",
+        mental="Street-smart but not formally educated",
+        communication="Talkative and persuasive when selling goods",
+        strengths="Extensive knowledge of local rumors and contacts",
+        weaknesses="Greedy and easily distracted by profit",
+        money=50,
+        inventory=["trade goods", "small dagger"],
+    )
+
+
+def _get_default_kingdoms(num_kingdoms: int = 3) -> KingdomsModel:
+    """
+    Provide default kingdoms when generation fails.
+
+    NOTE: Used for testing only - not passed to generate_with_retry() in production.
+    Kingdom generation is critical; app should crash if it fails after retries.
+    """
+    defaults = [
+        {
+            "name": "Aethermoor",
+            "history": "Ancient kingdom founded by magical scholars seeking wild magic sources.",
+            "type": "magic",
+            "location": "Northern highlands near crystal mountain ranges.",
+            "political_system": "Magocratic council rule",
+            "national_wealth": "Moderate wealth from magic artifact trade.",
+            "international": "Tense relations with technocratic southern kingdoms.",
+        },
+        {
+            "name": "Ironhold",
+            "history": "Militaristic state formed through conquest and iron-fisted governance.",
+            "type": "militaristic",
+            "location": "Central plateau fortress surrounded by defensive mountains.",
+            "political_system": "Military dictator supremacy",
+            "national_wealth": "Rich in metals but poor in agriculture.",
+            "international": "Aggressive expansionist policies toward neighbors.",
+        },
+        {
+            "name": "Merchants Bay",
+            "history": "Trading hub established at the convergence of three major rivers.",
+            "type": "diplomatic",
+            "location": "Coastal delta region with natural harbor.",
+            "political_system": "Merchant guild oligarchy",
+            "national_wealth": "Extremely wealthy from international trade routes.",
+            "international": "Neutral mediator in regional conflicts.",
+        },
+    ]
+
+    selected = defaults[:num_kingdoms] if num_kingdoms <= len(defaults) else defaults
+
+    return KingdomsModel(kingdoms=[KingdomData(**k) for k in selected])

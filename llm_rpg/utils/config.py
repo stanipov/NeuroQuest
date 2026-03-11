@@ -93,8 +93,13 @@ def create_default_config() -> Dict[str, Any]:
             },
         },
         "lore_generation": {
-            "num_npc_rules": 10,
-            "num_world_rules": 10,
+            # World rules configuration
+            "num_world_rules_per_category": 4,
+            # NPC rules configuration
+            "num_npc_rules_per_category": 3,
+            # Retry configuration
+            "max_generation_retries": 3,
+            # API configuration
             "sleep_sec": 0,
             "api_delay": 0,
         },
@@ -132,7 +137,8 @@ def setup_llms(config_manager: ConfigManager) -> Dict[str, Any]:
 
 
 def get_lore_generation_params(
-    config_manager: ConfigManager, user_params: Dict[str, Any]) -> Dict[str, Any]:
+    config_manager: ConfigManager, user_params: Dict[str, Any]
+) -> Dict[str, Any]:
     """Combine configuration and user parameters for lore generation"""
     lore_config = config_manager.get_lore_config()
 

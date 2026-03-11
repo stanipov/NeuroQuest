@@ -8,9 +8,10 @@ from rich.table import Table
 import os
 
 from llm_rpg.gui.styles import ConsoleStyles
+from llm_rpg.utils.gui import format_dict_with_categories
 
 
-class ConsoleManager():
+class ConsoleManager:
     """Handles console creation and management with rich library"""
 
     def __init__(self):
@@ -19,14 +20,12 @@ class ConsoleManager():
         self._styles = ConsoleStyles()  # Using the new styles class
         self._console = self.create_console()
 
-
     def setup_terminal_environment(self) -> None:
         """Ensure basic terminal environment variables"""
-        if 'TERM' not in os.environ:
-            os.environ['TERM'] = 'xterm-256color'
-        if 'COLORTERM' not in os.environ:
-            os.environ['COLORTERM'] = 'truecolor'
-
+        if "TERM" not in os.environ:
+            os.environ["TERM"] = "xterm-256color"
+        if "COLORTERM" not in os.environ:
+            os.environ["COLORTERM"] = "truecolor"
 
     def create_console(self) -> Console:
         """Create console with fallback options"""
@@ -35,145 +34,140 @@ class ConsoleManager():
         except Exception:
             return Console(theme=self._styles.basic_theme, force_terminal=True)
 
-
     def clear_screen(self) -> None:
         """Clear the terminal screen"""
         try:
             self.console.clear()  # Preferred method using rich
         except Exception:
             # Alternative cross-platform solution:
-            os.system('cls' if os.name == 'nt' else 'clear')
-
+            os.system("cls" if os.name == "nt" else "clear")
 
     def display_header(self, title: str) -> None:
         """Display a styled header with the given title"""
         self.console.print(
             Panel.fit(
-                Text(title, justify="center", style=self._styles.get_style('title')),
-                border_style=self.get_style('menu')
+                Text(title, justify="center", style=self._styles.get_style("title")),
+                border_style=self.get_style("menu"),
             ),
-            justify="center"
+            justify="center",
         )
-
 
     def get_style(self, style_name: str) -> Style:
         """Convenience method to get a style by name"""
         return self._styles.get_style(style_name)
-
 
     @property
     def console(self) -> Console:
         """The rich Console instance"""
         return self._console
 
-
-    def display_text_in_panel(self, title: str, content: str, style_name: str = "rpg_npc") -> None:
+    def display_text_in_panel(
+        self, title: str, content: str, style_name: str = "rpg_npc"
+    ) -> None:
         """Display a lore section in a styled panel"""
         panel = Panel(
             Text(content, style=self.get_style("llm_output")),
             title=title,
             border_style=self.get_style(style_name),
-            subtitle_align="right"
+            subtitle_align="right",
         )
         self.console.print(panel)
 
+    def display_character_card(
+        self, title: str, character_data: Dict[str, str], style_name: str = "rpg_npc"
+    ) -> None:
+        """Display a character card with fixed-width field labels and bold text in a panel"""
 
-    def display_character_card(self, title: str, character_data: Dict[str, str], style_name: str = "rpg_npc") -> None:
-        """Display a character card with fixed-width field labels and bold text in a panel"""        
-        
         # Capitalize field names for display
         def format_label(key: str) -> str:
-            return key.replace('_', ' ').title()
-        
+            return key.replace("_", " ").title()
+
         # Create a table with two columns
         table = Table(show_header=False, show_lines=False, box=None, padding=0)
-        table.add_column("Field", style=self.get_style("rpg_npc"), width=20, no_wrap=True)
+        table.add_column(
+            "Field", style=self.get_style("rpg_npc"), width=20, no_wrap=True
+        )
         table.add_column("Value", style=self.get_style("llm_output"))
-        
+
         # Iterate over available fields in character_data
         for key, value in character_data.items():
             if value is None:
-                value = 'N/A'
-            
+                value = "N/A"
+
             # Create bold label
             field_text = Text(format_label(key), style=self.get_style("rpg_npc"))
             field_text.stylize("bold")
-            
+
             # Format value - handle multi-line text
             value_str = str(value)
             table.add_row(field_text, value_str)
-        
+
         panel = Panel(
             table,
             title=title,
             border_style=self.get_style(style_name),
-            subtitle_align="right"
+            subtitle_align="right",
         )
         self.console.print(panel)
-
 
     def display_all_lore(self, game_lore: Dict[str, any]) -> None:
         """Display all game lore information using console_manager"""
         # Display World Description
         self.display_text_in_panel(
             title=f"Your world: {game_lore['world']['name']}",
-            content=game_lore['world']['description']
+            content=game_lore["world"]["description"],
         )
 
         # Display World Rules
-        world_rules = []
-        _rules = game_lore.get('world_outline', 'No rules defined')
-        if _rules != 'No rules defined':
-            world_rules = [ f"* {x}" for x in _rules.split('\n')]
-        _box_msg = "\n".join(world_rules)
-        self.display_text_in_panel(
-            title="World Outline",
-            content=_box_msg
-        )
+        world_outline = game_lore.get("world_outline")
+        if world_outline and isinstance(world_outline, dict):
+            content = format_dict_with_categories(world_outline)
+        else:
+            content = "No world rules defined"
 
-        # Display Starting Point
-        self.display_text_in_panel(
-            title="Entry Point",
-            content= game_lore.get('start', "No location provided")
-        )
+        self.display_text_in_panel(title="World Rules", content=content)
 
         # Display Human Player's Character Card (Charter Winning Conditions)
-        if 'human_player' in game_lore:
+        if "human_player" in game_lore:
             self.display_character_card(
-                title="Your Player",
-                character_data=game_lore['human_player']
+                title="Your Player", character_data=game_lore["human_player"]
             )
         else:
             self.display_text_in_panel(
-                title="Your Player",
-                content="No character data available"
+                title="Your Player", content="No character data available"
             )
 
         # Display NPC Companion(s)
-        if 'npc' in game_lore:
-            for npc_name, npc_data in game_lore['npc'].items():
+        if "npc" in game_lore:
+            for npc_name, npc_data in game_lore["npc"].items():
                 self.display_character_card(
-                    title=f"Companion: {npc_name}",
-                    character_data=npc_data
+                    title=f"Companion: {npc_name}", character_data=npc_data
                 )
         else:
             self.display_text_in_panel(
-                title="Companion",
-                content="No NPC companion assigned"
+                title="Companion", content="No NPC companion assigned"
             )
 
+        # Display NPC Behavioral Rules
+        if "npc_rules" in game_lore and game_lore["npc_rules"]:
+            for npc_name, rules in game_lore["npc_rules"].items():
+                if rules and isinstance(rules, dict):
+                    content = format_dict_with_categories(rules)
+                    self.display_text_in_panel(
+                        title=f"{npc_name} - Behavioral Rules",
+                        content=content,
+                        style_name="rpg_npc",
+                    )
+
         # Display Antagonist
-        if 'antagonist' in game_lore:
+        if "antagonist" in game_lore:
             self.display_character_card(
-                title="Your Antagonist",
-                character_data=game_lore['antagonist']
+                title="Your Antagonist", character_data=game_lore["antagonist"]
             )
         else:
             self.display_text_in_panel(
-                title="Antagonist",
-                content="No antagonist defined"
+                title="Antagonist", content="No antagonist defined"
             )
-
 
     @property
     def styles(self) -> Dict[str, Style]:
