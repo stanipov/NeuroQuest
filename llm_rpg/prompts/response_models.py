@@ -125,15 +125,22 @@ class DestinationLocation(BaseModel):
 
 
 class PlayerLocation(BaseModel):
-    current: CurrentLocation = Field(description="Current location", default=[])
-    destination: DestinationLocation = Field(description="Destination", default=[])
+    current: CurrentLocation | None = Field(
+        description="Current location", default=None
+    )
+    destination: DestinationLocation | None = Field(
+        description="Destination", default=None
+    )
 
 
 # ------------------------------- NPC -------------------------------
 class NPCResponseModel(BaseModel):
     """Response model for NPC action"""
 
-    action: str = Field(description="Your action. 1-2 sentences", default="")
+    action: str = Field(
+        description="Your action. Use 3-5 sentences for complex multi-step actions",
+        default="",
+    )
     state: PlayerState | None = Field(
         description="Determine player's state", default=None
     )

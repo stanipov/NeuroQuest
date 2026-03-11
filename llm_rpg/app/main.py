@@ -149,7 +149,7 @@ if __name__ == "__main__":
             game_lore, memory = init_memory_lore(game_lore_raw, memory_db_path, True)
 
         # Display all lore information
-        console_manager.display_all_lore(game_lore)
+        console_manager.display_all_lore(game_lore_raw)
 
         # set up GameAI
         game_ai = GameAI(
@@ -162,8 +162,8 @@ if __name__ == "__main__":
 
     if TEST_GAME_AI:
         logger.info(f"Loading the game")
-        row_num = 2
-        _row = game_io.games.iloc[row_num]
+        row_num = 6
+        _row = game_io.games.iloc[row_num-1]
         game_id = _row["id"]
         game_folder = _row["folder"]
         memory_db_path = os.path.join(game_folder, "memory.sql")

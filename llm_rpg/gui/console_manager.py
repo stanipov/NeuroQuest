@@ -121,9 +121,14 @@ class ConsoleManager():
         )
 
         # Display World Rules
+        world_rules = []
+        _rules = game_lore.get('world_outline', 'No rules defined')
+        if _rules != 'No rules defined':
+            world_rules = [ f"* {x}" for x in _rules.split('\n')]
+        _box_msg = "\n".join(world_rules)
         self.display_text_in_panel(
-            title="Rules",
-            content=game_lore.get('world_outline', 'No rules defined')
+            title="World Outline",
+            content=_box_msg
         )
 
         # Display Starting Point
