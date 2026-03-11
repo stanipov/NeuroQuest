@@ -487,7 +487,6 @@ class GenerateWorld:
         self.game_lore = {}
         self.game_gen_params = {}
         # defaults
-        self.expected_flds_kingdoms_def = set(KINGDOM_DESC_STRUCT.keys())
         self.expected_flds_towns_def = set(TOWNS_DESC_STRUCT.keys())
 
         # api delay to respect the rate limits
