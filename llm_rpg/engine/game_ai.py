@@ -3,7 +3,6 @@ from random import shuffle
 from llm_rpg.templates.tool import BaseTool
 from llm_rpg.templates.base_client import BaseClient
 from llm_rpg.engine.memory import SQLGameMemory
-from llm_rpg.utils.config import ConfigManager
 from llm_rpg.engine.npc_ai import NPC
 from llm_rpg.engine.tools import InputValidator
 from llm_rpg.gui.chat import HookResponse, InputProcessingStatus
@@ -23,10 +22,10 @@ class GameAI:
         lore: Dict[str, Any],
         llm_registry: Dict[str, BaseClient],
         memory: SQLGameMemory,
-        config_mgr: ConfigManager,
+        config: Dict[str, Any],
         **kwargs,
     ):
-        self.config = config_mgr
+        self.config = config
         self.lore = _cp(lore)
         self.llm_registry = llm_registry
 
@@ -52,7 +51,6 @@ class GameAI:
             "game_ai_llm": kwargs.get("game_ai_llm", None),
             "input_validator": kwargs.get("input_validator", None),
         }
-        self.game_cfg = self.config.get_game_config()
 
         self.__init_npc_ai()
         self.__init_input_validator()
@@ -65,7 +63,6 @@ class GameAI:
         return queue
 
     def __init_npc_ai(self):
-        game_cfg = self.config.get_game_config()
         if self.llm_registry["npc_ai_llm"] is None:
             logger.error(
                 f"No LLM found for NPC AI! Will use LLM for main game response"
@@ -77,7 +74,7 @@ class GameAI:
                 self.memory,
                 self.lore,
                 npc,
-                game_cfg["npc_chat_history"],
+                self.config.get("npc_chat_history", 20),
             )
 
     def __init_input_validator(self):

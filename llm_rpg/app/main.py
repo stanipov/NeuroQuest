@@ -7,7 +7,7 @@ import logging
 
 sys.path.append(os.getcwd())
 
-from llm_rpg.utils.path_utils import setup_paths
+from llm_rpg.utils.config_loader import load_config
 from llm_rpg.engine.io import IO
 from llm_rpg.gui.console_manager import ConsoleManager
 from llm_rpg.gui.game_menu import GameMenu
@@ -17,7 +17,7 @@ from llm_rpg.utils.mock_functions import user_input_process_mock, ai_response_mo
 from llm_rpg.app.lore_generator import GenerateLore
 from llm_rpg.app.set_memory import init_memory_lore
 
-from llm_rpg.utils.config import ConfigManager, setup_llms, get_lore_generation_params
+from llm_rpg.utils.config import setup_llms, get_lore_generation_params
 from llm_rpg.utils.logger import set_logger
 
 from llm_rpg.gui.chat2 import ChatInterface as ChatInterface2
@@ -45,15 +45,16 @@ class InputProcessingStatus(str, Enum):
 if __name__ == "__main__":
     # ----- Configuration Setup -----
     config_path = os.path.join(os.getcwd(), "configs", "working_cfg.json")
-    config_manager = ConfigManager(config_path)
+    config = load_config(config_path)
 
     # ----- Setup Paths -----
-    path_config = setup_paths(config_manager)
-    cwd = path_config.get("game_folder", os.path.join(os.getcwd(), "game"))
-    log_folder = path_config.get("log_folder", os.path.join(cwd, "logs"))
-    game_folder = path_config.get(
-        "saved_games_folder", os.path.join(cwd, "saved_games")
-    )
+    os.makedirs(config["paths"]["game_folder"], exist_ok=True)
+    os.makedirs(config["paths"]["log_folder"], exist_ok=True)
+    os.makedirs(config["paths"]["saved_games_folder"], exist_ok=True)
+
+    cwd = config["paths"]["game_folder"]
+    log_folder = config["paths"]["log_folder"]
+    game_folder = config["paths"]["saved_games_folder"]
 
     # ----- Current date -----
     dt_now = datetime.now().strftime("%Y-%m-%d")
@@ -64,26 +65,26 @@ if __name__ == "__main__":
     logger.info(f"{'-' * 10} Starting new game /{dt_now}/ {'-' * 10}")
 
     # ----- Load environment variables -----
-    dotenv_path = config_manager.config.get(
-        "dotenv_path", "/ext4/proj/2025/gen-ai_game/.env"
-    )
+    dotenv_path = config.get("dotenv_path") or ".env"
     load_dotenv(dotenv_path=dotenv_path)
     logger.info(f"Loaded dotenv file from {dotenv_path}")
 
     # ----- Setup LLMs -----
-    llm_clients = setup_llms(config_manager)
+    llm_clients = setup_llms(config)
     lore_llm = llm_clients["lore_llm"]
     npc_ai_llm = llm_clients["npc_ai_llm"]
     game_ai_llm = llm_clients["game_ai_llm"]
     input_validator_llm = llm_clients.get("input_validator", None)
 
     # ----- Get LLM-specific parameters -----
-    lore_llm_kw = config_manager.get_llm_config("lore_llm").get("props", None)
-    npc_llm_kw = config_manager.get_llm_config("npc_ai_llm").get("props", None)
-    game_ai_llm_kw = config_manager.get_llm_config("game_ai_llm").get("props", None)
-    input_validator_kw = config_manager.get_llm_config("input_validator").get(
-        "props", None
-    )
+    def get_llm_props(llm_type: str) -> dict | None:
+        llm_config = config.get("llm_providers", {}).get(llm_type)
+        return llm_config.get("props") if llm_config else None
+
+    lore_llm_kw = get_llm_props("lore_llm")
+    npc_llm_kw = get_llm_props("npc_ai_llm")
+    game_ai_llm_kw = get_llm_props("game_ai_llm")
+    input_validator_kw = get_llm_props("input_validator")
     llms_kwargs = {
         "lore_llm": lore_llm_kw,
         "npc_ai_llm": npc_llm_kw,
@@ -116,12 +117,15 @@ if __name__ == "__main__":
             logger.info(f"Game memory db will be located at {memory_db_path}")
 
             # Get lore generation parameters from config and user input
-            lore_config = get_lore_generation_params(
-                config_manager, result["new_game_params"]
-            )
+            lore_config = get_lore_generation_params(config, result["new_game_params"])
 
             game_lore_raw = GenerateLore(
-                lore_llm, lore_config, game_folder, console_manager, **lore_llm_kw
+                lore_llm,
+                lore_config,
+                game_folder,
+                console_manager,
+                config,
+                **lore_llm_kw,
             )
 
             # add description to the game
@@ -131,11 +135,8 @@ if __name__ == "__main__":
             )
             game_io.save_games()
 
-            # populating the memory
-            enable_memory = config_manager.get_game_config().get("enable_memory", True)
-            game_lore, memory = init_memory_lore(
-                game_lore_raw, memory_db_path, not enable_memory
-            )
+            # populating the memory (always False for new games - not loading from existing db)
+            game_lore, memory = init_memory_lore(game_lore_raw, memory_db_path, False)
             console_manager.console.print(f"{'=' * 15} Ready! {'=' * 15}")
 
         if not result["new_game"] and result["load_game"] >= 0:
@@ -159,13 +160,13 @@ if __name__ == "__main__":
             lore=game_lore_raw,
             llm_registry=llm_clients,
             memory=memory,
-            config_mgr=config_manager,
+            config=config["game"],
             **llms_kwargs,
         )
 
     if TEST_GAME_AI:
         logger.info(f"Loading the game")
-        _row = game_io.games.iloc[row_num-1]
+        _row = game_io.games.iloc[row_num - 1]
         game_id = _row["id"]
         game_folder = _row["folder"]
         memory_db_path = os.path.join(game_folder, "memory.sql")
@@ -179,7 +180,7 @@ if __name__ == "__main__":
             lore=game_lore_raw,
             llm_registry=llm_clients,
             memory=memory,
-            config_mgr=config_manager,
+            config=config["game"],
             **llms_kwargs,
         )
 
@@ -207,8 +208,7 @@ if __name__ == "__main__":
 
             if done:
                 for char in game_ai.generate_game_action():
-                    console_manager.console.print(char, end = '\r')
-
+                    console_manager.console.print(char, end="\r")
 
     if TEST_CHAT1:
         # TODO: Continue with chat interface setup...

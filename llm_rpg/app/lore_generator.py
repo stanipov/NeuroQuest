@@ -16,6 +16,7 @@ def GenerateLore(
     gen_config: Dict[str, Any],
     save_location: str,
     console_manager,
+    full_config: Dict[str, Any] = None,
     **llm_kw,
 ) -> Dict[str, Any]:
     """
@@ -23,9 +24,17 @@ def GenerateLore(
     :param llm: Callable: BaseClient
     :param gen_config: Dict[str, Any] -- lore generation parameters
     :param save_location: str -- save location
+    :param full_config: Dict[str, Any] -- full config including temperatures section
     :return:
     """
     logger = logging.getLogger(__name__)
+
+    # Get temperature settings from config (with fallbacks to hardcoded defaults)
+    temps = full_config.get("temperatures", {}) if full_config else {}
+    temp_world_gen = temps.get("lore_world_gen", 1.5)
+    temp_npc_gen = temps.get("lore_npc_gen", 0.75)
+    temp_inventory_desc = temps.get("lore_inventory_desc", 0.25)
+    temp_action_rules = temps.get("lore_action_rules", 0.9)
 
     # ----- Lore generation parameters -----
     num_kingdoms = gen_config["kingdoms"]
@@ -42,10 +51,10 @@ def GenerateLore(
     world_kind = gen_config["world_type"]
 
     generator = LoreGeneratorGvt(
-        llm, 
+        llm,
         api_delay=api_delay,
         temperature_cooldown_step=temperature_cooldown_step,
-        temperature_min=temperature_min
+        temperature_min=temperature_min,
     )
 
     # ----- Generating the world -----
@@ -60,7 +69,7 @@ def GenerateLore(
             world_kind,
             world_type,
             max_retries=max_retries,
-            temperature=1.5,
+            temperature=temp_world_gen,
         )
     else:
         raise ValueError(f"World kind is not recognized! Got {world_kind}")
@@ -114,7 +123,7 @@ def GenerateLore(
     msg = f"Generating {num_npc} NPC(s)"
     logger.info(msg)
     console_manager.console.print(msg)
-    generator.generate_npc(num_chars=num_npc, temperature=0.75)
+    generator.generate_npc(num_chars=num_npc, temperature=temp_npc_gen)
     with open(os.path.join(save_location, f"lore.json"), "w") as f:
         json.dump(generator.lore, f, indent=4)
     logger.info(f"Sleeping {sleep_sec}")
@@ -124,7 +133,7 @@ def GenerateLore(
     msg = f"Describing all inventories"
     logger.info(msg)
     console_manager.console.print(msg)
-    generator.describe_inventories(temperature=0.25)
+    generator.describe_inventories(temperature=temp_inventory_desc)
     with open(os.path.join(save_location, f"lore.json"), "w") as f:
         json.dump(generator.lore, f, indent=4)
     logger.info(f"Sleeping {sleep_sec}")
@@ -137,7 +146,7 @@ def GenerateLore(
     generator.generate_npc_action_rules(
         num_rules_per_category=num_npc_rules_per_category,
         max_retries=max_retries,
-        temperature=0.9,
+        temperature=temp_action_rules,
     )
     with open(os.path.join(save_location, f"lore.json"), "w") as f:
         json.dump(generator.lore, f, indent=4)
