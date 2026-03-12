@@ -364,3 +364,34 @@ class WorldDescriptionModel(BaseModel):
         description="Poetic world description capturing its essence (up to 5 sentences)",
         max_length=600,
     )
+
+
+# ------------------------------- Town Models -------------------------------
+
+
+class TownData(BaseModel):
+    """Single town structure"""
+
+    name: str = Field(
+        description="Town's unique, memorable name (1-2 words)", max_length=50
+    )
+    history: str = Field(
+        description="Brief founding story or defining moment (1 sentence, ~10 words)",
+        max_length=100,
+    )
+    location: str = Field(
+        description="Geographical position within kingdom (~10 words)",
+        max_length=100,
+    )
+    important_places: str = Field(
+        description="Key landmarks, buildings, or locations (1 sentence, ~10 words)",
+        max_length=100,
+    )
+
+
+class TownsModel(BaseModel):
+    """Collection of towns for a kingdom"""
+
+    towns: List[TownData] = Field(
+        description="List of all towns in the kingdom",
+    )

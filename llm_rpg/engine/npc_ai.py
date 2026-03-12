@@ -12,6 +12,7 @@ from copy import copy as _copy
 from typing import List, Dict, Any
 from pydantic import BaseModel
 from llm_rpg.prompts.response_models import NPCResponseModel
+from llm_rpg.prompts.npc import gen_npc_base_system_prompt
 from llm_rpg.templates.tool import BaseTool
 from llm_rpg.engine.tools import ObjectDescriptor
 
@@ -77,46 +78,14 @@ class NPC(BaseTool):
 
     def __base_sys_prt(self):
         """Generates a base and constant system prompt"""
-        npc_goal = self.npc_card.get("goal", "Unknown")
-        deeper_desires = self.npc_card.get("deeper_desires", "None specified")
-        deeper_pains = self.npc_card.get("deeper_pains", "None specified")
-
-        return f"""You are {self.name}, an autonomous character with deep motivations.
-
-YOUR CHARACTER:
-{self.npc_card}
-
-YOUR OVERARCHING GOAL: {npc_goal}
-YOUR DEEPER DESIRES: {deeper_desires}
-YOUR PAINS: {deeper_pains}
-
-BEHAVIORAL PRINCIPLES:
-{self.npc_rules}
-
-WORLD CONTEXT:
-- World: {self.world_name}
-- Description: {self.world_description}
-- Rules: {self.world_rules}
-
-YOUR ROLE:
-You are an ally to the human player, but you act based on your values and personality:
-1. Help the player when it aligns with your goals and principles
-2. Refuse requests that contradict your behavioral rules (explain why)
-3. Act proactively to pursue your own goals, not just react
-4. Make strategic decisions considering consequences
-5. Vary your responses - avoid repeating the same actions or phrases
-
-DECISION FRAMEWORK:
-Before acting, consider:
-- How does this advance my goal?
-- What are the risks and benefits?
-- Does this align with my principles?
-- How will others react?
-
-CONSTRAINTS:
-- Only use items in your inventory
-- Follow world rules strictly
-- Act consistently with your character"""
+        return gen_npc_base_system_prompt(
+            npc_name=self.name,
+            npc_card=self.npc_card,
+            npc_rules=self.npc_rules,
+            world_name=self.world_name,
+            world_description=self.world_description,
+            world_rules=self.world_rules,
+        )
 
     def compile_messages(self, enforce_struct_output: bool = False):
         """Generates the messages to submit to the LLM"""

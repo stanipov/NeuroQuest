@@ -28,6 +28,7 @@ The language should be straightforward and to the point."""
 #                               DEFAULT DESCRIPTORS
 #
 ########################################################################################################################
+# this is not used anywhere yet
 PLAYER_STATE_ESTIMATOR_SYS = """You are an AI Game Assistant. \
 Your job is to detect changes to:
     1. player's inventory

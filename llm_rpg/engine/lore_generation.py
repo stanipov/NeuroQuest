@@ -19,7 +19,6 @@ from llm_rpg.prompts.response_models import WorldDescriptionModel
 logger = logging.getLogger(__name__)
 
 from llm_rpg.prompts.lore_generation import (
-    TOWNS_DESC_STRUCT,
     gen_world_rules_msgs,
     gen_world_msgs,
     gen_kingdom_msgs,
@@ -47,7 +46,6 @@ from llm_rpg.engine.tools import ObjectDescriptor
 
 from llm_rpg.utils.helpers import (
     parse_kingdoms_response,
-    parse_towns,
     parse_character,
     parse_antagonist,
     input_not_ok,
@@ -486,8 +484,6 @@ class GenerateWorld:
         self.client = client
         self.game_lore = {}
         self.game_gen_params = {}
-        # defaults
-        self.expected_flds_towns_def = set(TOWNS_DESC_STRUCT.keys())
 
         # api delay to respect the rate limits
         if "api_delay" in kwargs:
@@ -563,7 +559,7 @@ class GenerateWorld:
         This is a critical game component - no fallback provided. If generation
         fails after all retries, the exception will propagate and crash the app.
         """
-                # Generate prompt
+        # Generate prompt
         world_msg = gen_world_msgs(world_desc)
 
         # Extract retry config
@@ -660,36 +656,64 @@ class GenerateWorld:
 
     def gen_towns(self, num_towns, **client_kw):
         """
-        Generates towns for each kingdom. Provide a number of towns.
-        TBD: a single number for all kingdoms or introduce some variability. Issue with variability
-        is that for small numbers random choices do not look that random
+        Generates towns for each kingdom using structured output.
 
-        :param num_towns:
-        :return:
+        This is a critical game component - no fallback provided. If generation
+        fails after all retries, the exception will propagate and crash the app.
         """
+        from llm_rpg.prompts.response_models import TownsModel
 
         self.game_lore["towns"] = {}
         self.game_gen_params["towns"] = {}
 
         for kingdom in self.game_lore["kingdoms"]:
             logger.info(f"Generating {num_towns} towns for {kingdom}")
-            msg_towns_k = gen_towns_msgs(
+
+            # Generate prompt
+            towns_msg = gen_towns_msgs(
                 num_towns, self.game_lore["world"], self.game_lore["kingdoms"], kingdom
             )
-            time.sleep(self.api_delay)
-            towns_raw_response = self.client.chat(msg_towns_k, **client_kw)
-            logger.debug(
-                f"Prompt tokens: {towns_raw_response['stats']['prompt_tokens']}"
+
+            # Extract retry config
+            max_retries = client_kw.pop("max_generation_retries", 3)
+
+            # Use structured output with retry (NO FALLBACK - critical component)
+            response = generate_with_retry(
+                self.client,
+                towns_msg,
+                response_model=TownsModel,
+                max_retries=max_retries,
+                fallback_value=None,  # NO FALLBACK - let it fail if generation breaks
+                component_name=f"Towns for {kingdom}",
+                temperature_cooldown_step=client_kw.pop(
+                    "temperature_cooldown_step", self.temp_cooldown_step
+                ),
+                temperature_min=client_kw.pop("temperature_min", self.temp_min),
+                **client_kw,
             )
-            logger.debug(f"Eval tokens: {towns_raw_response['stats']['eval_tokens']}")
-            towns = parse_towns(
-                towns_raw_response["message"], self.expected_flds_towns_def
-            )
-            self.game_lore["towns"][kingdom] = towns
-            self.game_gen_params["towns"] = {
-                "model": self.client.model_name,
-                "messages": msg_towns_k,
+
+            # Convert from list to dict for backward compatibility
+            towns_data = response["message"]["towns"]  # List of dicts
+            self.game_lore["towns"][kingdom] = {
+                t["name"]: t  # Each t is already a plain dict from model_dump()
+                for t in towns_data
             }
+
+            logger.info(
+                f"Created towns for {kingdom}: {list(self.game_lore['towns'][kingdom].keys())}"
+            )
+            logger.debug(f"Prompt tokens: {response['stats']['prompt_tokens']}")
+            logger.debug(f"Eval tokens: {response['stats']['eval_tokens']}")
+
+            self.game_gen_params["towns"][kingdom] = {
+                "model": self.client.model_name,
+                "messages": towns_msg,
+                "structured_model": "TownsModel",
+                "used_fallback": response["stats"]["prompt_tokens"] == 0,
+                "max_retries": max_retries,
+            }
+
+            time.sleep(self.api_delay)
 
     def gen_end_game_conditions(
         self,

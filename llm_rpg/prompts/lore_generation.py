@@ -22,12 +22,6 @@ from typing import Dict, List, Set, Any, Optional
 # instructions to generate a kingdom
 # these will be transferred to the LLMs
 # instructions to generate a town in a kingdom
-TOWNS_DESC_STRUCT = {
-    "history": "brief history of the town, (1 sentence, max 10 words)",
-    "location": "geographical location of the town in the kingdom, up to 10 words",
-    "important_places": "important places in the town, up to 1 sentence, max 10 words",
-}
-
 
 # Generic traits/descriptions of kingdoms. The LLM will pick randomly some of these
 kingdoms_traits = """The world has many kingdoms. They can be very different:
@@ -252,40 +246,68 @@ Output as JSON array of kingdom objects matching the KingdomsModel schema."""
     return [{"role": "user", "content": user_prompt}]
 
 
-def gen_towns_msgs(num_towns, world, kingdoms, kingdom_name) -> List[Dict[str, Any]]:
+def gen_towns_msgs(
+    num_towns: int,
+    world: Dict[str, str],
+    kingdoms: Dict[str, Dict[str, str]],
+    kingdom_name: str,
+) -> List[Dict[str, Any]]:
     """
-    Generates towns in a kingdom
-    """
+    Returns user prompt for structured town generation.
 
-    global LORE_GEN_SYS_PRT
+    System prompt with Pydantic schema is added automatically by struct_output().
+
+    :param num_towns: Number of towns to generate
+    :param world: World description dict with 'name' and 'description' keys
+    :param kingdoms: Dict of all kingdoms
+    :param kingdom_name: Name of the kingdom for which to generate towns
+    :return: User message for structured output (system added by struct_output)
+    """
+    if num_towns < 1:
+        logger.warning(f'Expected "num_towns">=1, got {num_towns}. Set to 1!')
+        num_towns = 1
 
     lst_kings = [x for x in kingdoms if x != kingdom_name]
 
-    if num_towns < 1:
-        logger.warning(f'Expected "num_towns">=1, got {num_towns}. Set "num_towns"=1!')
-        num_towns = 1
+    user_prompt = f"""Create {num_towns} unique, memorable towns for this fantasy kingdom.
 
-    t_templ = ""
-    for i in range(num_towns):
-        t_templ += f"""Town {i + 1}: <town name>\n"""
-        for fld, val in TOWNS_DESC_STRUCT.items():
-            t_templ += f"{fld}: {val}\n"
-        t_templ += f"avoid these names: {', '.join(lst_kings)}\n"
-        t_templ += "\n"
-
-    town_prompt = f"""Use this information of about the world
+WORLD CONTEXT:
 World Name: {world["name"]}
 World Description: {world["description"]}
-and the kingdom: 
+
+KINGDOM CONTEXT:
 {dict_2_str(kingdoms[kingdom_name])}
 
-to create {num_towns} different towns for a fantasy kingdom and world using this template:
-{t_templ}"""
+YOUR TASK:
+Create exactly {num_towns} distinctive towns that feel authentic to this kingdom's character. Each town should have its own identity while fitting the kingdom's overall theme.
 
-    return [
-        {"role": "system", "content": LORE_GEN_SYS_PRT},
-        {"role": "user", "content": town_prompt},
-    ]
+TOWN NAMING RULES:
+- Town names MUST NOT match any kingdom names: {", ".join(lst_kings) if lst_kings else "none"}
+- Use evocative, fantasy-appropriate names (e.g., "Whisperwood", "Ironcross", "Silverhaven")
+- Avoid generic names like "Small Village" or "Big City"
+
+TOWN DESIGN PRINCIPLES:
+1. **Variety**: Mix town sizes and purposes (trade hub, mining settlement, religious center, etc.)
+2. **Logic**: Locations should make geographical sense within the kingdom description
+3. **Character**: Each town should feel unique with distinct landmarks or features
+4. **Integration**: Important places should reflect the kingdom's type (magic/militaristic/diplomatic/technology)
+
+EXAMPLES OF GOOD TOWN DESCRIPTIONS:
+✅ "Blackforge": Founded when exiled dwarven smiths struck gold in volcanic caves.
+   Location: Southern mountain passes near active geysers.
+   Places: Massive open-air forges, the Molten Anvil tavern, dwarf-king's observatory.
+
+❌ BAD: "Small Town": A small town with a market. Near the capital. Has a church and inn.
+
+FOR EACH TOWN PROVIDE:
+- **name**: Unique fantasy name (1-2 words)
+- **history**: Founding story or defining event (1 sentence, ~10 words)
+- **location**: Geographical position in kingdom (~10 words)  
+- **important_places**: Key landmarks reflecting town's character (~10 words)
+
+Output as JSON array matching the TownsModel schema."""
+
+    return [{"role": "user", "content": user_prompt}]
 
 
 def gen_human_char_msgs(
@@ -827,3 +849,38 @@ def _get_default_kingdoms(num_kingdoms: int = 3) -> KingdomsModel:
     selected = defaults[:num_kingdoms] if num_kingdoms <= len(defaults) else defaults
 
     return KingdomsModel(kingdoms=[KingdomData(**k) for k in selected])
+
+
+def _get_default_towns(num_towns: int = 3):
+    """
+    Provide default towns when generation fails.
+
+    NOTE: Used for testing only - not passed to generate_with_retry() in production.
+    Town generation is critical; app should crash if it fails after retries.
+    """
+    from llm_rpg.prompts.response_models import TownData, TownsModel
+
+    defaults = [
+        {
+            "name": "Whispergate",
+            "history": "Founded by exiled scholars who hid forbidden knowledge beneath cobblestones.",
+            "location": "Northern forest edge overlooking misty valleys.",
+            "important_places": "Ancient library tower, whispering archway, scholar's retreat garden.",
+        },
+        {
+            "name": "Ironcross",
+            "history": "Built at junction of four trade routes by mercenary companies.",
+            "location": "Central plains where major highways intersect.",
+            "important_places": "Massive iron cross monument, mercenary guildhall, carriage repair yards.",
+        },
+        {
+            "name": "Silvermere",
+            "history": "Fishermen discovered healing springs attracting pilgrims from distant lands.",
+            "location": "Lakeshore settlement beside crystal-clear silver waters.",
+            "important_places": "Healing spring shrine, fishermen's cooperative, pilgrim hostel.",
+        },
+    ]
+
+    selected = defaults[:num_towns] if num_towns <= len(defaults) else defaults
+
+    return TownsModel(towns=[TownData(**t) for t in selected])
