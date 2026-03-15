@@ -23,6 +23,7 @@ from llm_rpg.prompts.response_models import (
     PlayerLocation,
 )
 from llm_rpg.prompts.lore_generation import gen_obj_est_msgs
+from llm_rpg.utils.prompt_utils import generate_with_retry
 
 
 import logging
@@ -39,10 +40,19 @@ class ObjectDescriptor:
     description, action mechanics, and strength estimates.
     """
 
-    def __init__(self, client: BaseClient) -> None:
+    def __init__(
+        self,
+        client: BaseClient,
+        max_retries: int = 3,
+        temperature_cooldown_step: float = 0.1,
+        temperature_min: float = 0.5,
+    ) -> None:
         self.client = client
         self.stats = {}
         self.response_model = InventoryItemDescription
+        self.max_retries = max_retries
+        self.temperature_cooldown_step = temperature_cooldown_step
+        self.temperature_min = temperature_min
 
     def describe(self, obj: str, **kwargs) -> Dict[str, str]:
         """
@@ -71,10 +81,21 @@ class ObjectDescriptor:
             return {}
 
         msgs = gen_obj_est_msgs(obj)
+
         try:
-            response = self.client.struct_output(msgs, self.response_model, **kwargs)
-            self.stats[obj] = response["stats"]
-            result = response["message"].model_dump()
+            response = generate_with_retry(
+                client=self.client,
+                messages=msgs,
+                response_model=self.response_model,
+                max_retries=self.max_retries,
+                fallback_value=None,
+                component_name=f"Inventory Item: {obj}",
+                temperature_cooldown_step=self.temperature_cooldown_step,
+                temperature_min=self.temperature_min,
+                **kwargs,
+            )
+
+            result = response["message"]
 
             if not result.get("name"):
                 logger.debug(f"{obj}: LLM returned empty name field, using object name")
@@ -82,6 +103,7 @@ class ObjectDescriptor:
             else:
                 result["name"] = result["name"].title()
 
+            self.stats[obj] = response["stats"]
             return result
 
         except Exception as e:

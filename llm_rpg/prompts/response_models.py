@@ -362,7 +362,7 @@ class WorldDescriptionModel(BaseModel):
     )
     description: str = Field(
         description="Poetic world description capturing its essence (up to 5 sentences)",
-        max_length=600,
+        #max_length=600,
     )
 
 

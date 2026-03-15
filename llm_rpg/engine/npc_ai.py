@@ -32,12 +32,19 @@ class NPC(BaseTool):
         sql_memory,
         game_lore: Dict[str, Any],
         npc_name: str,
-        num_turns: int = 10,
+        config: Dict[str, Any] = None,
     ):
+        config = config or {}
+        num_turns = config["npc_chat_history"]
         super().__init__(llm_client, NPCResponseModel)
 
         self.sql_memory = sql_memory
-        self.inv_items_descriptor = ObjectDescriptor(llm_client)
+        self.inv_items_descriptor = ObjectDescriptor(
+            llm_client,
+            max_retries=config["max_generation_retries"],
+            temperature_cooldown_step=config["temperature_cooldown_step"],
+            temperature_min=config["temperature_min"],
+        )
         self.name = npc_name
         self.npc_rules = _copy(game_lore["npc_rules"][npc_name])
         self.npc_card = _copy(game_lore["npc"][npc_name])

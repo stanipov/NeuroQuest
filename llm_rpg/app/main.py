@@ -25,9 +25,9 @@ from llm_rpg.gui.chat2 import ChatInterface as ChatInterface2
 from llm_rpg.engine.game_ai import GameAI
 
 # ----- Some testing flags -----
-TEST_MAIN_MENU = True
+TEST_MAIN_MENU = False
 
-TEST_GAME_AI = False
+TEST_GAME_AI = True
 row_num = 1
 
 TEST_CHAT2 = False

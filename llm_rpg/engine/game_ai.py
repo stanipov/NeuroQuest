@@ -74,7 +74,7 @@ class GameAI:
                 self.memory,
                 self.lore,
                 npc,
-                self.config.get("npc_chat_history", 20),
+                config=self.config,
             )
 
     def __init_input_validator(self):
