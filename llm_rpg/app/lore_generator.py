@@ -16,37 +16,36 @@ def GenerateLore(
     gen_config: Dict[str, Any],
     save_location: str,
     console_manager,
-    full_config: Dict[str, Any] = None,
+    full_config: Dict[str, Any],
     **llm_kw,
 ) -> Dict[str, Any]:
     """
     Generates the game lore.
     :param llm: Callable: BaseClient
-    :param gen_config: Dict[str, Any] -- lore generation parameters
+    :param gen_config: Dict[str, Any] -- lore generation parameters (merged from config and user input)
     :param save_location: str -- save location
-    :param full_config: Dict[str, Any] -- full config including temperatures section
+    :param full_config: Dict[str, Any] -- full config (AppConfig after validation) including temperatures section
     :return:
     """
     logger = logging.getLogger(__name__)
 
-    # Get temperature settings from config (with fallbacks to hardcoded defaults)
-    temps = full_config.get("temperatures", {}) if full_config else {}
-    temp_world_gen = temps.get("lore_world_gen", 1.5)
-    temp_npc_gen = temps.get("lore_npc_gen", 0.75)
-    temp_inventory_desc = temps.get("lore_inventory_desc", 0.25)
-    temp_action_rules = temps.get("lore_action_rules", 0.9)
+    temps = full_config["temperatures"]
 
-    # ----- Lore generation parameters -----
+    temp_world_gen = temps["lore_world_gen"]
+    temp_npc_gen = temps["lore_npc_gen"]
+    temp_inventory_desc = temps["lore_inventory_desc"]
+    temp_action_rules = temps["lore_action_rules"]
+
     num_kingdoms = gen_config["kingdoms"]
     num_towns = gen_config["towns_per_kingdom"]
     num_npc = gen_config["companions"]
-    num_npc_rules_per_category = gen_config.get("num_npc_rules_per_category", 3)
-    sleep_sec = gen_config.get("sleep_sec", 0)
-    api_delay = gen_config.get("api_delay", 0)
-    num_world_rules_per_category = gen_config.get("num_world_rules_per_category", 4)
-    max_retries = gen_config.get("max_generation_retries", 3)
-    temperature_cooldown_step = gen_config.get("temperature_cooldown_step", 0.1)
-    temperature_min = gen_config.get("temperature_min", 0.5)
+    num_npc_rules_per_category = gen_config["num_npc_rules_per_category"]
+    sleep_sec = gen_config["sleep_sec"]
+    api_delay = gen_config["api_delay"]
+    num_world_rules_per_category = gen_config["num_world_rules_per_category"]
+    max_retries = gen_config["max_generation_retries"]
+    temperature_cooldown_step = gen_config["temperature_cooldown_step"]
+    temperature_min = gen_config["temperature_min"]
     world_type = gen_config["world_setting"]
     world_kind = gen_config["world_type"]
 
