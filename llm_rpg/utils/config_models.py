@@ -23,7 +23,7 @@ class PathsConfig(BaseModel):
 
 
 class LoreGenerationConfig(BaseModel):
-    num_world_rules_per_category: int = 4
+    num_world_rules_per_category: int = 5
     num_npc_rules_per_category: int = 3
     max_generation_retries: int = 3
     temperature_cooldown_step: float = 0.1

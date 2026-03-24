@@ -1,14 +1,12 @@
 import json
 from pathlib import Path
-
+from llm_rpg.utils.config_models import AppConfig
 
 def load_config(config_path: str) -> dict:
     """
     Load and validate config from JSON file.
     Returns a plain dict (model_dump output) for compatibility.
     """
-    from llm_rpg.utils.config_models import AppConfig
-
     with open(config_path, "r") as f:
         data = json.load(f)
     # Validate using Pydantic (raises ValidationError on failure)
@@ -19,8 +17,6 @@ def load_config(config_path: str) -> dict:
 
 def save_config(config: dict, config_path: str):
     """Save config to JSON file"""
-    from llm_rpg.utils.config_models import AppConfig
-
     if isinstance(config, AppConfig):
         config = config.model_dump()
     Path(config_path).parent.mkdir(parents=True, exist_ok=True)
