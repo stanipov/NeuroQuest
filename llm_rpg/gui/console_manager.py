@@ -169,6 +169,12 @@ class ConsoleManager:
                 title="Antagonist", content="No antagonist defined"
             )
 
+        # Display Entry Point / Start Location
+        if "start" in game_lore:
+            self.display_text_in_panel(
+                title="Entry Point", content=game_lore["start"], style_name="rpg_system"
+            )
+
     @property
     def styles(self) -> Dict[str, Style]:
         """Dictionary of predefined styles"""
