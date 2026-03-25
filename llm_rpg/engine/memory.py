@@ -41,7 +41,7 @@ class GameMemory:
         db_path: str,
         llm_client: Callable,
         game_lore: Dict[str, Any],
-        config: Dict[str, Any],
+        **config: Dict[str, Any],
     ) -> None:
         """
         Initialize GameMemory.
