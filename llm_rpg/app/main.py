@@ -15,20 +15,19 @@ from llm_rpg.gui.chat import RPGChatInterface
 from llm_rpg.utils.mock_functions import user_input_process_mock, ai_response_mock
 
 from llm_rpg.app.lore_generator import GenerateLore
-from llm_rpg.app.set_memory import init_memory_lore
+from llm_rpg.engine.memory import GameMemory
 
 from llm_rpg.utils.config import setup_llms, get_lore_generation_params
 from llm_rpg.utils.logger import set_logger
 
-from llm_rpg.gui.chat2 import ChatInterface as ChatInterface2
 
 from llm_rpg.engine.game_ai import GameAI
 
 # ----- Some testing flags -----
-TEST_MAIN_MENU = False
+TEST_MAIN_MENU = True
 
-TEST_GAME_AI = True
-row_num = 1
+TEST_GAME_AI = False
+row_num = 2
 
 TEST_CHAT2 = False
 TEST_CHAT1 = False
@@ -136,7 +135,9 @@ if __name__ == "__main__":
             game_io.save_games()
 
             # populating the memory (always False for new games - not loading from existing db)
-            game_lore, memory = init_memory_lore(game_lore_raw, memory_db_path, False)
+            memory = GameMemory(db_path=memory_db_path,
+                                llm_client=game_ai_llm,
+                                game_lore=game_lore_raw)
             console_manager.console.print(f"{'=' * 15} Ready! {'=' * 15}")
 
         if not result["new_game"] and result["load_game"] >= 0:
@@ -150,7 +151,9 @@ if __name__ == "__main__":
             with open(os.path.join(game_folder, "lore.json"), "r") as f:
                 game_lore_raw = json.load(f)
 
-            game_lore, memory = init_memory_lore(game_lore_raw, memory_db_path, True)
+            memory = GameMemory(db_path=memory_db_path,
+                                llm_client=game_ai_llm,
+                                game_lore=game_lore_raw)
 
         # Display all lore information
         console_manager.display_all_lore(game_lore_raw)
@@ -174,7 +177,9 @@ if __name__ == "__main__":
         with open(os.path.join(game_folder, "lore.json"), "r") as f:
             game_lore_raw = json.load(f)
 
-        game_lore, memory = init_memory_lore(game_lore_raw, memory_db_path, True)
+        memory = GameMemory(db_path=memory_db_path,
+                            llm_client=game_ai_llm,
+                            game_lore=game_lore_raw)
 
         game_ai = GameAI(
             lore=game_lore_raw,
@@ -185,7 +190,7 @@ if __name__ == "__main__":
         )
 
         # Display all lore information
-        console_manager.display_all_lore(game_lore)
+        console_manager.display_all_lore(game_lore_raw)
 
         # User input loop
         while True:

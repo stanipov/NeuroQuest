@@ -159,16 +159,6 @@ class ConsoleManager:
                         style_name="rpg_npc",
                     )
 
-        # Display Antagonist
-        if "antagonist" in game_lore:
-            self.display_character_card(
-                title="Your Antagonist", character_data=game_lore["antagonist"]
-            )
-        else:
-            self.display_text_in_panel(
-                title="Antagonist", content="No antagonist defined"
-            )
-
         # Display Entry Point / Start Location
         if "start" in game_lore:
             self.display_text_in_panel(

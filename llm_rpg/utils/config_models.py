@@ -28,8 +28,6 @@ class LoreGenerationConfig(BaseModel):
     max_generation_retries: int = 3
     temperature_cooldown_step: float = 0.1
     temperature_min: float = 0.5
-    sleep_sec: int = 0
-    api_delay: int = 0
 
 
 class GameConfig(BaseModel):
@@ -45,7 +43,6 @@ class GameConfig(BaseModel):
 class TemperatureConfig(BaseModel):
     lore_world_gen: float = 1.5
     lore_npc_gen: float = 0.75
-    lore_inventory_desc: float = 0.25
     lore_action_rules: float = 0.9
     npc_response: float = 0.75
     gameplay_action: float = 0.9

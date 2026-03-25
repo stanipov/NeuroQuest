@@ -77,9 +77,3 @@ def parse_character(
     loc_response: str, expected_fields: Union[List[str], Set[str]]
 ) -> Dict[str, Any]:
     return parse2structure(loc_response, expected_fields)
-
-
-def parse_antagonist(
-    loc_response: str, expected_fields: Union[List[str], Set[str]]
-) -> Dict[str, Any]:
-    return parse2structure(loc_response, expected_fields)

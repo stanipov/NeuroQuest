@@ -2,7 +2,7 @@ from typing import List, Dict, Any, Generator
 from random import shuffle
 from llm_rpg.templates.tool import BaseTool
 from llm_rpg.templates.base_client import BaseClient
-from llm_rpg.engine.memory import SQLGameMemory
+from llm_rpg.engine.memory import GameMemory
 from llm_rpg.engine.npc_ai import NPC
 from llm_rpg.engine.tools import InputValidator
 from llm_rpg.gui.chat import HookResponse, InputProcessingStatus
@@ -21,7 +21,7 @@ class GameAI:
         self,
         lore: Dict[str, Any],
         llm_registry: Dict[str, BaseClient],
-        memory: SQLGameMemory,
+        memory: GameMemory,
         config: Dict[str, Any],
         **kwargs,
     ):

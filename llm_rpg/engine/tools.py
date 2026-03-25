@@ -1,6 +1,5 @@
 """
 Collection of helper tools needed for the game.
-- ObjectDescriptor --> describes objects, their type, strength, action, etc.
 TODO: InventoryChange --> detects changes into inventory
 
 # - ObjectDetector --> detects all objects/tools used by the human and the AI player
@@ -15,100 +14,17 @@ from llm_rpg.templates.base_client import BaseClient
 from llm_rpg.templates.tool import BaseTool
 
 from llm_rpg.prompts.response_models import (
-    InventoryItemDescription,
     _pick_actions,
     InventoryUpdates,
     PlayerState,
     ValidateClassifyAction,
     PlayerLocation,
 )
-from llm_rpg.prompts.lore_generation import gen_obj_est_msgs
-from llm_rpg.utils.prompt_utils import generate_with_retry
 
 
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-# ------------------------------------------------- OBJECT DESCRIPTOR --------------------------------------------------
-class ObjectDescriptor:
-    """
-    Generates descriptions and actions for inventory items (e.g., axe, spell, etc.)
-
-    Uses an LLM to generate structured item descriptions including type,
-    description, action mechanics, and strength estimates.
-    """
-
-    def __init__(
-        self,
-        client: BaseClient,
-        max_retries: int = 3,
-        temperature_cooldown_step: float = 0.1,
-        temperature_min: float = 0.5,
-    ) -> None:
-        self.client = client
-        self.stats = {}
-        self.response_model = InventoryItemDescription
-        self.max_retries = max_retries
-        self.temperature_cooldown_step = temperature_cooldown_step
-        self.temperature_min = temperature_min
-
-    def describe(self, obj: str, **kwargs) -> Dict[str, str]:
-        """
-        Describes a game inventory item by calling an LLM.
-
-        Args:
-            obj: The object/item name to describe (e.g., "steel longsword")
-            **kwargs: Additional arguments passed to the LLM client (e.g., temperature)
-
-        Returns:
-            Dict[str, str] with keys: name, type, description, action, strength
-
-            Returns empty dict {} if:
-            - Input is empty or whitespace-only
-            - LLM call fails with exception
-            - LLM returns invalid/unparseable response
-
-        Note:
-            Callers should check if result is non-empty before using.
-            Empty dict indicates the item description should be skipped
-            or a fallback/default should be used.
-        """
-        # Handle empty input early - return empty dict
-        if not obj or not obj.strip():
-            logger.debug("Empty object name provided, returning empty dict")
-            return {}
-
-        msgs = gen_obj_est_msgs(obj)
-
-        try:
-            response = generate_with_retry(
-                client=self.client,
-                messages=msgs,
-                response_model=self.response_model,
-                max_retries=self.max_retries,
-                fallback_value=None,
-                component_name=f"Inventory Item: {obj}",
-                temperature_cooldown_step=self.temperature_cooldown_step,
-                temperature_min=self.temperature_min,
-                **kwargs,
-            )
-
-            result = response["message"]
-
-            if not result.get("name"):
-                logger.debug(f"{obj}: LLM returned empty name field, using object name")
-                result["name"] = obj.title()
-            else:
-                result["name"] = result["name"].title()
-
-            self.stats[obj] = response["stats"]
-            return result
-
-        except Exception as e:
-            logger.warning(f"{obj}: Failed to describe - {e}, returning empty dict")
-            return {}
 
 
 # ----------------------------------------------- PLAYER INPUT VALIDATOR -----------------------------------------------

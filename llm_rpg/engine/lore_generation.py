@@ -3,7 +3,7 @@ Collection of tools to generate a game lore using some basic inputs
 
 There are currently 2 major classes:
 1. GenerateWorld -- generates world and conditions to lose/win
-2. GenerateCharacter -- generates characters (player/npc and player's opponent)
+2. GenerateCharacter -- generates characters (player/npc)
 
 These classes provide tools to generate the respective lore part. They are governed
  by LoreGeneratorGvt which instantiates both of these and calls with proper arguments.
@@ -24,14 +24,12 @@ from llm_rpg.prompts.lore_generation import (
     gen_kingdom_msgs,
     gen_towns_msgs,
     gen_human_char_msgs,
-    gen_antagonist_msgs,
     gen_condition_end_game,
     gen_npc_behavior_rules,
     gen_entry_point_msg,
     _get_default_world_rules,
     _get_default_npc_rules,
     _get_default_character,
-    _get_default_antagonist,
     _get_default_npc_character,
     _get_default_kingdoms,
     kingdoms_traits,
@@ -40,14 +38,11 @@ from llm_rpg.prompts.response_models import (
     WorldRulesModel,
     NPCBehaviorRulesModel,
     CharacterModel,
-    AntagonistModel,
 )
-from llm_rpg.engine.tools import ObjectDescriptor
 
 from llm_rpg.utils.helpers import (
     parse_kingdoms_response,
     parse_character,
-    parse_antagonist,
     input_not_ok,
 )
 
@@ -113,20 +108,11 @@ class LoreGeneratorGvt:
         self.client = client
         self.lore = {}
         self.game_gen_params = {}
-        # LUT for inventory items
-        self.lore["inventory_lut"] = {}
 
         # We can generate own world description or use default one
         # If no world description/outline/rues were generated, then
         # the default will be used
         self.lore["world_outline"] = None
-        # API calls delay in seconds
-        # needed for rate limitations
-        if "api_delay" in kwargs:
-            self.api_delay = kwargs.pop("api_delay")
-        else:
-            self.api_delay = 0
-
         # Temperature cooldown settings for retry logic (from config or defaults)
         if "temperature_cooldown_step" in kwargs:
             self.temp_cooldown_step = kwargs.pop("temperature_cooldown_step")
@@ -150,7 +136,6 @@ class LoreGeneratorGvt:
             temperature_cooldown_step=self.temp_cooldown_step,
             temperature_min=self.temp_min,
         )
-        self.ObjDesc = ObjectDescriptor(client)
 
     def _generate_world_outline(
         self, num_rules: int, kind: str, world_type: str, **client_kwargs
@@ -259,44 +244,10 @@ class LoreGeneratorGvt:
                 "town": town_name,
             }
 
-    def generate_antagonist(self, same_location: bool = True):
-        if same_location:
-            kingdom_name = self.lore["start_location"]["human"]["kingdom"]
-        else:
-            max_iter = 10
-            cnt = 0
-            kingdom_name = random.choice(list(self.lore["kingdoms"].keys()))
-            while (
-                kingdom_name == self.lore["start_location"]["human"]["kingdom"]
-                and cnt < max_iter
-            ):
-                kingdom_name = random.choice(list(self.lore["kingdoms"].keys()))
-                cnt += 1
-
-        ans = self.char_gen.gen_characters(
-            self.lore,
-            "enemy",
-            player_desc=self.lore["human_player"],
-            kingdom_name=kingdom_name,
-        )
-        _key = list(ans.keys())[0]
-        self.lore["antagonist"] = ans[_key]
-
-        if "start_location" not in self.lore:
-            self.lore["start_location"] = {}
-
-        self.lore["start_location"]["antagonist"] = {
-            "kingdom": kingdom_name,
-            "town": "",
-        }
-        self.game_gen_params.update(self.char_gen.char_gen_params)
-
     def generate_end_game_conditions(self, num_conditions: int = 3):
         self.world_generator.gen_end_game_conditions(
             player_desc=self.lore["human_player"],
             player_loc=self.lore["start_location"]["human"]["kingdom"],
-            antag_desc=self.lore["antagonist"],
-            antag_loc=self.lore["start_location"]["antagonist"]["kingdom"],
             num_conditions=num_conditions,
         )
         self.lore.update(self.world_generator.game_lore)
@@ -356,87 +307,6 @@ class LoreGeneratorGvt:
 
         logger.info("All NPC behavioral rules generation completed")
 
-    def describe_inventories(self, temperature=0.25):
-        """
-        TODO: this is a wrapper method which will call a method that describes items (?)
-        Describes inventory elements of each item in inventories (human, NPCs, antagonist, etc.)
-        :param temperature:
-        :return:
-        """
-        if "human_player" in self.lore:
-            logger.info(f"Describing inventory items for the human player")
-            self.lore["human_player"]["money"] = int(self.lore["human_player"]["money"])
-            inv_items = self.lore["human_player"]["inventory"]
-            ans = self.__describe_items(inv_items, temperature)
-            if ans != {}:
-                self.lore["inventory_lut"].update(ans)
-                self.lore["human_player"]["inventory"] = list(ans.keys())
-
-        if "npc" in self.lore:
-            logger.info(f"Describing inventory items fot NPCs")
-            for npc in self.lore["npc"]:
-                logger.info(f"NPC: {npc}")
-                self.lore["npc"][npc]["money"] = int(self.lore["npc"][npc]["money"])
-                inv_items = self.lore["npc"][npc]["inventory"]
-                ans = self.__describe_items(inv_items, temperature)
-                if ans != {}:
-                    self.lore["inventory_lut"].update(ans)
-                    self.lore["npc"][npc]["inventory"] = list(ans.keys())
-
-        if "antagonist" in self.lore:
-            if "inventory" in self.lore["antagonist"]:
-                logger.info(f"Describing inventory items for the antagonist")
-                inv_items = self.lore["antagonist"]["inventory"]
-                ans = self.__describe_items(inv_items, temperature)
-                if ans != {}:
-                    self.lore["inventory_lut"].update(ans)
-                    self.lore["antagonist"]["inventory"] = list(ans.keys())
-
-        logger.info(f"Done")
-
-    def __describe_items(self, items: List[str] | str, temperature=0.25):
-        """
-        Describes inventory items using ObjectDescriptor.
-
-        Empty items and failed descriptions are skipped.
-
-        Args:
-            items: Inventory items as comma-separated string or list of strings
-            temperature: LLM temperature parameter for description generation
-
-        Returns:
-            Dict mapping item names to their description dictionaries.
-            Only successfully described items with non-empty names are included.
-            Items with empty names or failed descriptions are excluded.
-        """
-        ans = {}
-        inv_items = []
-
-        if type(items) == str:
-            inv_items = [x.strip() for x in items.split(", ")]
-        elif type(items) == list:
-            inv_items = dCP(items)
-        else:
-            logger.error(f"Inventory items must be str or list, got {type(items)}")
-            return ans
-
-        for item in inv_items:
-            # Skip empty or whitespace-only items
-            if not item or not item.strip():
-                logger.debug(f"Skipping empty inventory item")
-                continue
-
-            logger.info(f"Describing {item}")
-            _t = self.ObjDesc.describe(item, temperature=temperature)
-
-            # Only add non-empty results with valid names (defense in depth)
-            if _t and _t.get("name"):
-                ans[_t["name"]] = _t
-
-            sleep(self.api_delay)
-
-        return ans
-
     def gen_starting_point(self, **client_kw):
         """
         Generates the starting point for the game
@@ -484,12 +354,6 @@ class GenerateWorld:
         self.client = client
         self.game_lore = {}
         self.game_gen_params = {}
-
-        # api delay to respect the rate limits
-        if "api_delay" in kwargs:
-            self.api_delay = kwargs.pop("api_delay")
-        else:
-            self.api_delay = 0
 
         # Temperature cooldown settings for retry logic (from config or defaults)
         if "temperature_cooldown_step" in kwargs:
@@ -713,22 +577,16 @@ class GenerateWorld:
                 "max_retries": max_retries,
             }
 
-            time.sleep(self.api_delay)
-
     def gen_end_game_conditions(
         self,
         player_desc: Dict[str, str],
         player_loc: str,
-        antag_desc: Dict[str, str],
-        antag_loc: str,
         num_conditions: int,
     ) -> None:
         """
-        Generates conditions to win and loose the game given the description of the human player and its antagonist
-        :param antag_loc: location (starting) of the antagonist/enemy
+        Generates conditions to win and loose the game given the description of the human player
         :param player_loc: starting location of the human player
         :param player_desc: description of the human player
-        :param antag_desc: description of the antagonist/enemy
         :param num_conditions: number of conditions
         :return:
         """
@@ -742,9 +600,7 @@ class GenerateWorld:
                 cond_gen_msgs = gen_condition_end_game(
                     self.game_lore,
                     player_desc,
-                    antag_desc,
                     player_loc,
-                    antag_loc,
                     num_conditions,
                     kind,
                 )
@@ -762,18 +618,16 @@ class GenerateWorld:
                 raise ValueError(
                     f'Could not generate conditions to "{kind}" with "{e}" error'
                 )
-            logger.info(f"Sleeping {self.api_delay} sec")
-            time.sleep(self.api_delay)
         logger.info("Done")
 
 
 class GenerateCharacter:
-    global CHAR_DESC_STRUCT, ANTAGONIST_DESC
+    global CHAR_DESC_STRUCT
 
     def __init__(self, client: BaseClient, **kwargs):
         self.client = client
 
-        # stores all characters generated (human, antagonist, npcs, etc)
+        # stores all characters generated (human, npcs, etc)
         self.characters = {}
         # store this data for possible debugging and logging
         self.char_gen_params = {}
@@ -803,7 +657,7 @@ class GenerateCharacter:
         """
         Creates a character
 
-        :param kind: human, antagonist, npc
+        :param kind: human, npc
         :param kwargs:
             char_desc_struct -- a dictionary with mandatory fields to generate
             num_char -- number of characters to generate
@@ -815,8 +669,6 @@ class GenerateCharacter:
         if kind == "human":
             characters = self.__gen_playable_char(game_lore, **kwargs)
             logger.info(f"Generated {len(characters.keys())} characters")
-        if kind == "antagonist" or kind == "enemy":
-            characters = self.__gen_antagonist(game_lore, **kwargs)
 
         if not characters and characters != {}:
             logger.warning("Generation was not successful")
@@ -885,54 +737,4 @@ class GenerateCharacter:
             fallback = _get_default_character().model_dump()
             fallback["inventory"] = ", ".join(fallback["inventory"])
             logger.info(f"Using fallback character: {fallback['name']}")
-            return {fallback["name"]: fallback}
-
-    def __gen_antagonist(self, game_lore: Dict[str, str], **kwargs) -> Dict[str, Any]:
-        """Generates ONE antagonist using structured output"""
-
-        human_desc = kwargs.get("player_desc", None)
-        k_name = kwargs.get("kingdom_name", None)
-        max_retries = kwargs.pop("max_retries", 3)
-
-        if input_not_ok(human_desc, dict, {}):
-            logger.error(f"Description of a human player can't be empty or None")
-            raise ValueError(f"Description of a human player can't be empty or None")
-
-        if input_not_ok(k_name, str, ""):
-            logger.error(f"Kingdom name can't be empty or None")
-            raise ValueError(f"Kingdom name can't be empty or None")
-
-        msgs2gen = gen_antagonist_msgs(game_lore, human_desc, k_name, num_chars=1)
-        self.char_gen_params["antagonists"] = msgs2gen
-
-        # Extract client kwargs
-        client_kw = {
-            k: v
-            for k, v in kwargs.items()
-            if k not in ["player_desc", "kingdom_name", "antag_desc"]
-        }
-
-        try:
-            response = generate_with_retry(
-                client=self.client,
-                messages=msgs2gen,
-                response_model=AntagonistModel,
-                max_retries=max_retries,
-                fallback_value=_get_default_antagonist(),
-                component_name="Antagonist",
-                temperature_cooldown_step=self.temp_cooldown_step,
-                temperature_min=self.temp_min,
-                **client_kw,
-            )
-
-            char_data = response["message"]
-            antagonist_name = char_data["name"]
-            logger.info(f"Antagonist generated: {antagonist_name}")
-
-            return {antagonist_name: char_data}
-
-        except Exception as e:
-            logger.error(f"Failed to generate antagonist: {e}")
-            fallback = _get_default_antagonist().model_dump()
-            logger.info(f"Using fallback antagonist: {fallback['name']}")
             return {fallback["name"]: fallback}

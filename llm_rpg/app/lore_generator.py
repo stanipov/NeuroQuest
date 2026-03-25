@@ -33,15 +33,12 @@ def GenerateLore(
 
     temp_world_gen = temps["lore_world_gen"]
     temp_npc_gen = temps["lore_npc_gen"]
-    temp_inventory_desc = temps["lore_inventory_desc"]
     temp_action_rules = temps["lore_action_rules"]
 
     num_kingdoms = gen_config["kingdoms"]
     num_towns = gen_config["towns_per_kingdom"]
     num_npc = gen_config["companions"]
     num_npc_rules_per_category = gen_config["num_npc_rules_per_category"]
-    sleep_sec = gen_config["sleep_sec"]
-    api_delay = gen_config["api_delay"]
     num_world_rules_per_category = gen_config["num_world_rules_per_category"]
     max_retries = gen_config["max_generation_retries"]
     temperature_cooldown_step = gen_config["temperature_cooldown_step"]
@@ -51,7 +48,6 @@ def GenerateLore(
 
     generator = LoreGeneratorGvt(
         llm,
-        api_delay=api_delay,
         temperature_cooldown_step=temperature_cooldown_step,
         temperature_min=temperature_min,
     )
@@ -75,8 +71,6 @@ def GenerateLore(
 
     with open(os.path.join(save_location, f"lore.json"), "w") as f:
         json.dump(generator.lore, f, indent=4)
-    logger.info(f"Sleeping {sleep_sec}")
-    sleep(sleep_sec)
 
     # ----- Generating the kingdoms -----
     msg = f"Generating {num_kingdoms} kingdoms"
@@ -85,8 +79,6 @@ def GenerateLore(
     generator.generate_kingdoms(num_kingdoms=num_kingdoms, **llm_kw)
     with open(os.path.join(save_location, f"lore.json"), "w") as f:
         json.dump(generator.lore, f, indent=4)
-    logger.info(f"Sleeping {sleep_sec}")
-    sleep(sleep_sec)
 
     # ----- Generating the towns -----
     msg = f"Generating {num_towns} towns for each kingdom"
@@ -95,8 +87,6 @@ def GenerateLore(
     generator.generate_towns(num_towns=num_towns, **llm_kw)
     with open(os.path.join(save_location, f"lore.json"), "w") as f:
         json.dump(generator.lore, f, indent=4)
-    logger.info(f"Sleeping {sleep_sec}")
-    sleep(sleep_sec)
 
     # ----- Generating human player card -----
     msg = "Generating human player character"
@@ -105,18 +95,6 @@ def GenerateLore(
     generator.generate_human_player(**llm_kw)
     with open(os.path.join(save_location, f"lore.json"), "w") as f:
         json.dump(generator.lore, f, indent=4)
-    logger.info(f"Sleeping {sleep_sec}")
-    sleep(sleep_sec)
-
-    # ----- Generating player's antagonist -----
-    msg = "Generating player's antagonist"
-    logger.info(msg)
-    console_manager.console.print(msg)
-    generator.generate_antagonist()
-    with open(os.path.join(save_location, f"lore.json"), "w") as f:
-        json.dump(generator.lore, f, indent=4)
-    logger.info(f"Sleeping {sleep_sec}")
-    sleep(sleep_sec)
 
     # ----- Generating NPCs -----
     msg = f"Generating {num_npc} NPC(s)"
@@ -125,18 +103,6 @@ def GenerateLore(
     generator.generate_npc(num_chars=num_npc, temperature=temp_npc_gen)
     with open(os.path.join(save_location, f"lore.json"), "w") as f:
         json.dump(generator.lore, f, indent=4)
-    logger.info(f"Sleeping {sleep_sec}")
-    sleep(sleep_sec)
-
-    # ----- Describing inventories -----
-    msg = f"Describing all inventories"
-    logger.info(msg)
-    console_manager.console.print(msg)
-    generator.describe_inventories(temperature=temp_inventory_desc)
-    with open(os.path.join(save_location, f"lore.json"), "w") as f:
-        json.dump(generator.lore, f, indent=4)
-    logger.info(f"Sleeping {sleep_sec}")
-    sleep(sleep_sec)
 
     # ----- Generating action rules for the NPCs -----
     msg = f"Generation action rules for the NPCs"
@@ -149,8 +115,6 @@ def GenerateLore(
     )
     with open(os.path.join(save_location, f"lore.json"), "w") as f:
         json.dump(generator.lore, f, indent=4)
-    logger.info(f"Sleeping {sleep_sec}")
-    sleep(sleep_sec)
 
     # ----- Starting point -----
     msg = f"Generating the starting point"

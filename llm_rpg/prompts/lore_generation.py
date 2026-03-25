@@ -63,32 +63,6 @@ Instructions:
 - respond only with a list of rules/outlines of 1 sentence (10 words max)."""
 
 
-# A system prompt to describe objects based on instructions
-# Used in ObjectDescriptor class
-OBJ_ESTIMATOR_SYS_PROMPT = """You are an AI Game engine. 
-Your task is to describe these properties of a game object:
-- name
-- type
-- description
-- action (how it works)
-- strength
-
-Your response must be valid JSON with this exact structure:
-{
-  "name": "object name (1-2 words)",
-  "type": "armor|weapon|food|drink|magical item|document|book|clothing|medical|tool|other",
-  "description": "brief description or empty string",
-  "action": "how it works or empty string",
-  "strength": "weak|moderate|strong or empty string"
-}
-
-Rules:
-- Short and concise (max 5 words per field)
-- Only return valid JSON, no markdown or extra text
-- Correct spelling errors in the object name
-- Follow task instructions for each field"""
-
-
 ########################################################################################################################
 def gen_world_rules_msgs(
     num_rules: int, world_type: str = "fantasy", kind: str = "dark"
@@ -367,55 +341,6 @@ The character's occupation should match the world setting. Inventory items must 
     ]
 
 
-def gen_antagonist_msgs(
-    game_lore: Dict[str, Any],
-    player_desc: Dict[str, str],
-    kingdom_name: str,
-    num_chars: int = 1,
-    antag_desc=None,
-) -> List[Dict[str, Any]]:
-    """Generates messages to create ONE antagonist"""
-
-    if num_chars != 1:
-        logger.warning(
-            f"Expected num_chars=1 for structured output, got {num_chars}. Generating 1."
-        )
-        num_chars = 1
-
-    # Generate random age bounds for antagonist (same logic as characters)
-    age_min = random.randint(18, 30)
-    age_max = random.randint(age_min + 10, age_min + 40)
-
-    user_prompt = f"""Create ONE antagonist who opposes the human player in this world.
-
-World Name: {game_lore["world"]["name"]}
-World Description: {game_lore["world"]["description"]}
-
-The human player:
-{dict_2_str(player_desc)}
-
-The kingdom: {dict_2_str(game_lore["kingdoms"][kingdom_name])}
-
-The antagonist should include:
-- A unique name (1-3 words)
-- Occupation as a ruler or significant person in {kingdom_name}
-- Age between {age_min} and {age_max} years
-- 1-2 sentence backstory explaining their rise to power/influence
-- An epic goal that DIRECTLY contradicts the player's goal: "{player_desc.get("goal", "unknown")}"
-- Notable advantages (up to 10 words)
-- Exploitable vulnerabilities (up to 10 words)
-- Physical attributes (1 sentence)
-- Mental attributes (1 sentence)
-- Social abilities (5 words max)
-
-The antagonist's goal must be in clear contradiction to the player's goal. They should be a worthy opponent."""
-
-    return [
-        {"role": "system", "content": LORE_GEN_SYS_PRT},
-        {"role": "user", "content": user_prompt},
-    ]
-
-
 def gen_npc_character_msgs(
     game_lore: Dict[str, Any],
     kingdom_name: str,
@@ -474,9 +399,7 @@ The character should fit the {npc_occupation} role logically. Inventory items sh
 def gen_condition_end_game(
     game_lore: Dict[str, Any],
     player_desc: Dict[str, str],
-    antagonist_desc: Dict[str, str],
     human_loc: str,
-    antag_loc: str,
     num_conditions: int,
     condition: str,
 ) -> List[Dict[str, str]]:
@@ -485,9 +408,7 @@ def gen_condition_end_game(
 
     :param game_lore: condensed game lore, not what is shown to the player
     :param player_desc: a dictionary with description of the human player
-    :param antagonist_desc: a dictionary with description of the antagonist/enemy
     :param human_loc: starting kingdom of the human player
-    :param antag_loc: (starting?) location of the antagonist
     :param num_conditions: number of conditions to win/loose
     :param condition: win or loose.
     :return: messages (aka list of dictionaries)
@@ -498,65 +419,18 @@ def gen_condition_end_game(
 Generate {num_conditions} conditions to {condition} for a human player
 {player_desc}
 
-This player is against this antagonist:
-{antagonist_desc}
-
-These characters act in this world:
+This character acts in this world:
 World Name: {game_lore["world"]["name"]}
 World Description: {game_lore["world"]["description"]}
 
-Players kingdom:
+Player's kingdom:
 {game_lore["kingdoms"][human_loc]}
-
-Antagonist's kingdom:
-{game_lore["kingdoms"][antag_loc]}
 
 Provide only a numbered list without any additional words"""
 
     return [
-        {"role": "system", "content": LORE_GEN_SYS_PRT},
-        {"role": "user", "content": conditions_prt},
-    ]
-
-
-def gen_obj_est_msgs(obj: str) -> List[Dict[str, str]]:
-    """
-    Generates messages to prompt for object description
-    :param obj:
-    :return:
-    """
-    global OBJ_ESTIMATOR_SYS_PROMPT
-
-    # Use Pydantic model field descriptions for structured output
-    from llm_rpg.prompts.response_models import InventoryItemDescription
-
-    task = f"""Describe this game object: {obj}
-
-Required JSON output format:
-{{
-  "name": "<shortened name, 1-2 words, no articles>",
-  "type": "<one of: armor, weapon, food, drink, magical item, document, book, clothing, medical, tool, other>",
-  "description": "<brief description or empty string if not applicable>",
-  "action": "<how it works or empty string if not applicable>",
-  "strength": "<weak/moderate/strong estimate or empty string if not applicable>"
-}}
-
-Name rules: Remove articles and shorten to 1-2 words. Examples:
-- "long wooden spear" -> "spear"
-- "battle axe" -> "axe"  
-- "steel greatsword" -> "greatsword"
-
-Field descriptions:
-- type: {InventoryItemDescription.model_fields["type"].description}
-- description: {InventoryItemDescription.model_fields["description"].description}
-- action: {InventoryItemDescription.model_fields["action"].description}
-- strength: {InventoryItemDescription.model_fields["strength"].description}
-
-Return only valid JSON, no markdown formatting."""
-
-    return [
-        {"role": "system", "content": OBJ_ESTIMATOR_SYS_PROMPT},
-        {"role": "user", "content": task},
+        {"role": "system", "content": LOC_SYS_PRT},
+        {"role": "user", "content": entry_prt},
     ]
 
 
@@ -748,8 +622,8 @@ def _get_default_npc_rules() -> NPCBehaviorRulesModel:
     )
 
 
-# Import CharacterModel and AntagonistModel for type hints
-from llm_rpg.prompts.response_models import CharacterModel, AntagonistModel
+# Import CharacterModel for type hints
+from llm_rpg.prompts.response_models import CharacterModel
 
 
 def _get_default_character() -> CharacterModel:
@@ -770,21 +644,6 @@ def _get_default_character() -> CharacterModel:
         weaknesses="Impulsive and distrustful of authority",
         money=100,
         inventory=["steel longsword", "chainmail vest", "healing potion"],
-    )
-
-
-def _get_default_antagonist() -> AntagonistModel:
-    """Return default antagonist for fallback"""
-    return AntagonistModel(
-        name="Dark Lord Malakor",
-        occupation="warlock king",
-        biography="An ancient sorcerer who seeks to plunge the world into eternal darkness.",
-        goal="Conquer all kingdoms and enslave humanity to serve his dark masters",
-        strengths="Mastery of forbidden magic and vast wealth",
-        weaknesses="Overconfident and underestimates mortal ingenuity",
-        physical="Ageless appearance with unnaturally strong constitution",
-        mental="Genius-level intellect but consumed by paranoia",
-        communication="Charismatic manipulator who inspires terror",
     )
 
 

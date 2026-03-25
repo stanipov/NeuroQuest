@@ -14,7 +14,6 @@ from pydantic import BaseModel
 from llm_rpg.prompts.response_models import NPCResponseModel
 from llm_rpg.prompts.npc import gen_npc_base_system_prompt
 from llm_rpg.templates.tool import BaseTool
-from llm_rpg.engine.tools import ObjectDescriptor
 
 
 # ------------------------------ Helpers ------------------------------
@@ -39,12 +38,6 @@ class NPC(BaseTool):
         super().__init__(llm_client, NPCResponseModel)
 
         self.sql_memory = sql_memory
-        self.inv_items_descriptor = ObjectDescriptor(
-            llm_client,
-            max_retries=config["max_generation_retries"],
-            temperature_cooldown_step=config["temperature_cooldown_step"],
-            temperature_min=config["temperature_min"],
-        )
         self.name = npc_name
         self.npc_rules = _copy(game_lore["npc_rules"][npc_name])
         self.npc_card = _copy(game_lore["npc"][npc_name])
@@ -64,7 +57,6 @@ class NPC(BaseTool):
         # Defaults and statics
         self.base_system_prompt = self.__base_sys_prt()
         self.__fmt_header_lines = f"{'-' * 5}"
-        self.__inv_desc_T = 0.25
 
         # Recent response
         self.recent_response = None
@@ -79,9 +71,8 @@ class NPC(BaseTool):
         self.inventory_items = self.sql_memory.list_inventory_items(self.name)
 
     def __upd_inv_items_lut(self):
+        """Updates inventory items lookup - just item names, no descriptions"""
         self.inventory_items_desc = {}
-        for x in self.sql_memory.list_all_rows(self.sql_memory.items_tbl_name):
-            self.inventory_items_desc[x["name"]] = x
 
     def __base_sys_prt(self):
         """Generates a base and constant system prompt"""
@@ -129,8 +120,17 @@ YOUR CONTEXT:
 - Your goal: {npc_goal}
 - Your inventory: {self.inventory_items}
 
+CONVERSATION SIGNALS:
+- Player's message: {current_turn["human_response"]}
+- Check if this is a question: Look for "why", "how", "what", "who", "when", "where" or direct address (name)
+
 DECISION REQUIRED:
-Consider the human player's action carefully. Decide on your response or proactive action that aligns with your goals and principles. What will you do?"""
+Interpret the player's input carefully:
+1. If the player asks a question (why/how/what/who/when/where) or addresses you directly, ANSWER first
+2. If the player describes an action, execute the action
+3. If both questioning and action, answer first then act
+
+Respond in character, using 3-5 sentences for complex responses."""
 
         if conv_context != "":
             TASK += f"""{self.__fmt_header_lines} Recent History:{self.__fmt_header_lines}
@@ -204,77 +204,21 @@ Consider the human player's action carefully. Decide on your response or proacti
         self.sql_memory.update_turn(turn_msgs)
 
     def update_inventory(self, response):
-        logger.debug("Updating inventory of any")
-        # List all items in the items table to see if we need to describe any new item
-        all_inv_items = set()
-        for row in self.sql_memory.list_all_rows(self.sql_memory.items_tbl_name):
-            all_inv_items.add(row["name"])
+        """Updates inventory based on LLM response - item names only, no descriptions"""
+        logger.debug("Updating inventory")
 
-        new_inventory_items = {}
-        for item in response.inventory_update.itemUpdates:
-            if item.item not in all_inv_items:
-                logger.debug(f"New item not in LUT: {item.item}")
-                new_inventory_items[item.item] = {
-                    "description": {},
-                    "owner": item.subject,
-                    "count": item.change_amount,
-                }
-
-        if len(new_inventory_items) != 0:
-            logger.info(f"Found new items to describe: {new_inventory_items.keys()}")
-            for item in new_inventory_items:
-                logger.info(f'Describing new item: "{item}"')
-                desc_result = self.inv_items_descriptor.describe(
-                    item, temperature=self.__inv_desc_T
-                )
-
-                # Use result if successful, otherwise create minimal fallback
-                if desc_result and desc_result.get("name"):
-                    new_inventory_items[item]["description"] = desc_result
-                    self.inventory_items_desc.update({item.item: desc_result})
-                else:
-                    # Fallback: minimal description with just the item name
-                    logger.debug(
-                        f"Description failed for '{item}', using minimal fallback"
-                    )
-                    minimal_desc = {
-                        "name": item.title() if item else str(item),
-                        "type": "other",
-                        "description": "",
-                        "action": "",
-                        "strength": "",
-                    }
-                    new_inventory_items[item]["description"] = minimal_desc
-                    self.inventory_items_desc.update({item.item: minimal_desc})
-
-        # add the new items
-        for item in new_inventory_items:
-            owner = new_inventory_items[item]["owner"]
-            payload = {item: new_inventory_items[item]["count"]}
-            payload_lut = {item: new_inventory_items[item]["description"]}
-            self.sql_memory.add_inventory_items(owner, payload, payload_lut)
-
-        # update all items now
+        # Update all items from the response
         for item in response.inventory_update.itemUpdates:
             logger.debug(f"Processing item: {item.item}")
-            # if the item is not in the current inventory of the NPC:
-            if item not in self.inventory_items:
-                payload = {
-                    item.item: item.change_amount,
-                }
-                payload_lut = {item.item: self.inventory_items_desc[item.item]}
-                logger.debug(f"Adding {item.item}")
-                logger.debug(f"Payload: {payload}")
-                logger.debug(f"Character: {item.subject}")
-                self.sql_memory.add_inventory_items(item.subject, payload, payload_lut)
+
+            # Add new item to inventory if not present
+            if item.item not in self.inventory_items:
+                payload = {item.item: item.change_amount}
+                self.sql_memory.add_inventory_items(item.subject, payload, {})
                 self.inventory_items.append(item.item)
 
-            # If item.item is in new_inventory_items, then it was a brand-new item, and we have updated it above
-            # Also, we do not want double update
-            if (
-                item.item not in new_inventory_items
-                and item.item not in self.inventory_items
-            ):
+            # Update existing item count
+            elif item.item not in self.inventory_items:
                 payload = {
                     "item": item.item,
                     "character": item.subject,
@@ -283,26 +227,19 @@ Consider the human player's action carefully. Decide on your response or proacti
                 logger.debug(f"Updating with payload: {payload}")
                 self.sql_memory.update_inventory_item(payload)
 
-            # remove item from inventory of the player if applicable
-            logger.debug(
-                f"Checking if {item.item} count needs to be decreased for someone else"
-            )
+            # Remove item from owner's inventory if applicable (transfer)
             character2subtract_item = ""
             if self.__is_human_player(item.source):
-                logger.debug(f"Item belonged to the human player")
                 character2subtract_item = "human"
             elif item.source in self.other_npc_names:
-                logger.debug(f"Item belonged to {item.source}")
                 character2subtract_item = item.source
-            logger.debug(f'Shall decrease for: "{character2subtract_item}"')
+
             if character2subtract_item != "":
-                logger.debug(f"Decreasing count of {item.item} by {item.change_amount}")
                 payload = {
                     "item": item.item,
                     "character": character2subtract_item,
                     "count_change": -item.change_amount,
                 }
-                logger.debug(f"Payload: {payload}")
                 self.sql_memory.update_inventory_item(payload)
 
     def update_state(self, response):

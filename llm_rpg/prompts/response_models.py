@@ -57,17 +57,6 @@ class ValidateClassifyAction(BaseModel):
     )
 
 
-# ------------------------------- Description of inventory item -------------------------------
-class InventoryItemDescription(BaseModel):
-    """Inventory item"""
-
-    name: str = Field(description="Object's name", default="")
-    type: str = Field(description="Type of the object", default="")
-    description: str = Field(description="Object description", default="")
-    action: str = Field(description="How this object works", default="")
-    strength: str = Field(description="Strength of the object", default="")
-
-
 # ------------------------------- Inventory Changes -------------------------------
 class InventoryItemChange(BaseModel):
     """Inventory update unit"""
@@ -216,37 +205,6 @@ class CharacterModel(BaseModel):
     )
 
 
-class AntagonistModel(BaseModel):
-    """Structured antagonist data (no inventory field)"""
-
-    name: str = Field(description="Antagonist's unique name (1-3 words)", max_length=50)
-    occupation: str = Field(
-        description="Antagonist's position in the kingdom (e.g., ruler, warlock, general, merchant lord)",
-        max_length=50,
-    )
-    biography: str = Field(
-        description="Brief backstory (1-2 sentences)", max_length=200
-    )
-    goal: str = Field(
-        description="Goal that directly contradicts the player's goal - must be clear and significant",
-        max_length=150,
-    )
-    strengths: str = Field(
-        description="Notable advantages (1 sentence, up to 10 words)", max_length=100
-    )
-    weaknesses: str = Field(
-        description="Exploitable vulnerabilities (1 sentence, up to 10 words)",
-        max_length=100,
-    )
-    physical: str = Field(
-        description="Physical attributes (1 sentence)", max_length=100
-    )
-    mental: str = Field(description="Mental attributes (1 sentence)", max_length=100)
-    communication: str = Field(
-        description="Social abilities (5 words max)", max_length=50
-    )
-
-
 # ------------------------------- World Rules -------------------------------
 class WorldRulesModel(BaseModel):
     """Structured world rules organized by domain
@@ -362,7 +320,7 @@ class WorldDescriptionModel(BaseModel):
     )
     description: str = Field(
         description="Poetic world description capturing its essence (up to 5 sentences)",
-        #max_length=600,
+        # max_length=600,
     )
 
 
