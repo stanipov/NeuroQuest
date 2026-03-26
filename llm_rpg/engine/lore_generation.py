@@ -27,11 +27,6 @@ from llm_rpg.prompts.lore_generation import (
     gen_condition_end_game,
     gen_npc_behavior_rules,
     gen_entry_point_msg,
-    _get_default_world_rules,
-    _get_default_npc_rules,
-    _get_default_character,
-    _get_default_npc_character,
-    _get_default_kingdoms,
     kingdoms_traits,
 )
 from llm_rpg.prompts.response_models import (
@@ -40,16 +35,9 @@ from llm_rpg.prompts.response_models import (
     CharacterModel,
 )
 
-from llm_rpg.utils.helpers import (
-    parse_kingdoms_response,
-    parse_character,
-    input_not_ok,
-)
-
 from llm_rpg.templates.base_client import BaseClient
 
 import random
-from time import sleep
 from copy import deepcopy as dCP
 
 
@@ -281,7 +269,7 @@ class LoreGeneratorGvt:
                 messages=msgs,
                 response_model=NPCBehaviorRulesModel,
                 max_retries=max_retries,
-                fallback_value=_get_default_npc_rules(),
+                fallback_value=None,  # No fallback - raise exception on failure
                 component_name=f"NPC Rules: {npc_name}",
                 # Allow per-call override, otherwise use instance variable (from config)
                 temperature_cooldown_step=client_kw.pop(
@@ -389,7 +377,7 @@ class GenerateWorld:
             messages=msgs,
             response_model=WorldRulesModel,
             max_retries=max_retries,
-            fallback_value=_get_default_world_rules(),
+            fallback_value=None,  # No fallback - raise exception on failure
             component_name="World Rules",
             # Allow per-call override, otherwise use instance variable (from config)
             temperature_cooldown_step=client_kw.pop(
@@ -710,7 +698,7 @@ class GenerateCharacter:
                 messages=char_gen_msgs,
                 response_model=CharacterModel,
                 max_retries=max_retries,
-                fallback_value=_get_default_character(),
+                fallback_value=None,  # No fallback - raise exception on failure
                 component_name="Human Character",
                 temperature_cooldown_step=self.temp_cooldown_step,
                 temperature_min=self.temp_min,
@@ -719,10 +707,6 @@ class GenerateCharacter:
 
             # Convert to dict (already done by generate_with_retry via model_dump())
             char_data = response["message"]
-
-            # Convert inventory list to string for lore storage
-            if isinstance(char_data.get("inventory"), list):
-                char_data["inventory"] = ", ".join(char_data["inventory"])
 
             character_name = char_data["name"]
             logger.info(
@@ -733,8 +717,4 @@ class GenerateCharacter:
 
         except Exception as e:
             logger.error(f"Failed to generate human character: {e}")
-            # Return fallback character
-            fallback = _get_default_character().model_dump()
-            fallback["inventory"] = ", ".join(fallback["inventory"])
-            logger.info(f"Using fallback character: {fallback['name']}")
-            return {fallback["name"]: fallback}
+            raise
