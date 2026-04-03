@@ -1,7 +1,7 @@
 """
 Classes/methods to work with memory
 """
-from typing import List, Dict, Any, Callable
+from typing import List, Dict, Any, Callable, Optional
 import re
 from sqlalchemy import text
 
@@ -36,13 +36,11 @@ class GameMemory:
     # Roles that indicate end of a turn (triggers new row creation)
     _TURN_ENDING_ROLES = {"game_action", "displayed_action", "compacted_history"}
 
-    def __init__(
-        self,
-        db_path: str,
-        llm_client: Callable,
-        game_lore: Dict[str, Any],
-        **config: Dict[str, Any],
-    ) -> None:
+    def __init__(self,
+                 db_path: str,
+                 llm_client: Callable,
+                 game_lore: Dict[str, Any],
+                 **config: Dict[str, Any]) -> None:
         """
         Initialize GameMemory.
 
@@ -610,3 +608,33 @@ class GameMemory:
             Empty string
         """
         return ""
+
+    def get_character_location(self, character: str) -> Optional[Dict[str, Any]]:
+        """
+        Get the most recent location for a character.
+
+        Args:
+            character: Character name ('user' or NPC name)
+
+        Returns:
+            Dict with keys 'turn', 'kingdom', 'town', 'details'
+            None if no location found
+        """
+        from typing import Optional
+
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                text("""SELECT turn, kingdom, town, details FROM location
+                       WHERE character = :character
+                       ORDER BY turn DESC LIMIT 1"""),
+                {"character": character},
+            )
+            row = result.first()
+            if row:
+                return {
+                    "turn": row[0],
+                    "kingdom": row[1] or "",
+                    "town": row[2] or "",
+                    "details": row[3] or "",
+                }
+            return None
