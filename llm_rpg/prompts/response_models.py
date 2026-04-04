@@ -7,53 +7,77 @@ from typing import Optional, List, Dict
 
 
 # ------------------------------- Validate and classify player's response -------------------------------
-_fld_reason_desc = """"If non-game action, classify. Pick from [lore, other]"""
-_fld_val_reason_desc = "Explain decision, list all identified violations (3 words max) if valid == False, empty if valid == True"
-
-_pick_actions = [
-    "inventory change",
-    "mental state change",
-    "physical state change",
-    "relocation",
-    "conversation",
-    "fight",
+game_action_types = [
+    "inventory change",      # shall we call inventory update tool?
+    "mental state change",   # shall we call mental state update tool?
+    "physical state change", # shall we call physical state update tool?
+    "relocation",            # shall we call location update tool
+    "npc_interaction",       # shall we call NPC AI tool?
+    "information_request",   # shall we route directly to the game response?
 ]
-_fld_action_type_desc = (
-    f"Classify action, pick one from {_pick_actions} if valid == True else ''"
-)
-
-
-class ActionTypes(BaseModel):
-    """Classification of game action"""
-
-    action_type: str = Field(description=_fld_action_type_desc, default="")
-
-
-class ValidReason(BaseModel):
-    """Reason for a valid/non-valid game action"""
-
-    reason: str = Field(description="If valid, explain in 3 words", default="")
 
 
 class ValidateClassifyAction(BaseModel):
-    """Validator response model"""
+    """Validator response model for player input"""
 
     is_game_action: bool = Field(
-        validation_alias="is_game_action", description="True/False", default=True
-    )
-    non_game_action: str = Field(
-        validation_alias="non_game_action", description=_fld_reason_desc, default=""
-    )
-    valid: bool = Field(
-        validation_alias="valid",
-        description="Valid game action? True or False",
+        description="True if player performs action WITHIN game world. False for questions ABOUT the game\
+         (lore, surroundings, NPC descriptions, mechanics).",
         default=True,
     )
-    valid_reason: List[ValidReason] = Field(
-        description=_fld_val_reason_desc, default_factory=list
+
+    valid: bool = Field(
+        description="True if the game action follows all rules. Fal1se if it violates world rules, uses unavailable \
+        items, contradicts established facts, or attempts impossible actions.",
+        default=True,
     )
-    action_type: list[ActionTypes] = Field(
-        description="List of game actions if is_game_action==True", default_factory=list
+
+    violation_details: str = Field(
+        description="Detailed description of violations. Only populated when valid=False",
+        default=""
+    )
+
+    action_types: List[str] = Field(
+        description=f"Types of game actions detected. Pick from {game_action_types}. \
+        MUST include at least one type if valid=True. Leave empty [] if the action is invalid (valid=False)",
+        default_factory=list,
+    )
+
+
+# ------------------------------- Action Proposals -------------------------------
+class ActionProposal(BaseModel):
+    """A proposed interpretation of player's intended action"""
+
+    action_type: str = Field(
+        description=f"Type of action. Pick from {game_action_types}",
+    )
+    target: Optional[str] = Field(
+        description="Target of the action (NPC name, location, item). None if no specific target.",
+        default=None,
+    )
+
+    intent: str = Field(
+        description="What the player is trying to accomplish. Be concise but specific.",
+    )
+
+    confidence: float = Field(
+        description="Confidence score 0.0-1.0 that this interpretation is correct",
+        ge=0.0,
+        le=1.0,
+    )
+
+
+class ActionProposals(BaseModel):
+    """Container for proposed action interpretations"""
+
+    proposals: List[ActionProposal] = Field(
+        description="List of possible action interpretations, sorted by confidence (highest first)",
+        default_factory=list,
+    )
+
+    primary_interpretation: Optional[str] = Field(
+        description="Natural language summary of the most likely interpretation",
+        default=None,
     )
 
 

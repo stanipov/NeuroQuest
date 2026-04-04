@@ -48,6 +48,26 @@ class TemperatureConfig(BaseModel):
     gameplay_action: float = 0.9
 
 
+class InputValidatorConfig(BaseModel):
+    """Configuration for input validator"""
+    history_depth: int = Field(
+        default=3,
+        ge=1,
+        le=20,
+        description="Number of game turns to include in context"
+    )
+    include_npc_locations: bool = Field(
+        default=True,
+        description="Include NPCs at current location in context"
+    )
+    max_violation_words: int = Field(
+        default=10,
+        ge=3,
+        le=50,
+        description="Max words per violation description"
+    )
+
+
 class AppConfig(BaseModel):
     dotenv_path: Optional[str] = None
     paths: PathsConfig = Field(default_factory=PathsConfig)
@@ -55,6 +75,7 @@ class AppConfig(BaseModel):
     lore_generation: LoreGenerationConfig = Field(default_factory=LoreGenerationConfig)
     game: GameConfig = Field(default_factory=GameConfig)
     temperatures: TemperatureConfig = Field(default_factory=TemperatureConfig)
+    input_validator: InputValidatorConfig = Field(default_factory=InputValidatorConfig)
 
     class Config:
         extra = "ignore"
