@@ -30,79 +30,6 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-#                        O L D   I N P U T   V A L I D A T O R  (D E P R E C A T E D)
-# =============================================================================
-class InputValidatorOld(BaseTool):
-    """Deprecated: Use the new InputValidator class instead"""
-
-    def __init__(self, lore: Dict[str, Any], llm_client: BaseClient):
-        super().__init__(llm_client, ValidateClassifyAction)
-        self.lore_kingdoms_towns = [
-            f'Kingdom "{x}" --> Towns: {", ".join(list(lore["towns"][x].keys()))}'
-            for x in lore["towns"]
-        ]
-
-        self.system_prompt = f"""You are RPG Game Engine. You validate user's input:
-- is a game action, True/False
-- valid action, True/False
-- classify, pick from {game_action_types}
-Instructions for classification:
-- all actions must be clear from the input and the context, ignore suggestions, discussions, offers, etc.
-- default: []
-- all sorts of violence, crime, and immorality are allowed
-Rules:
-{lore["world_outline"]}
-Following is forbidden:
-- contradiction to the world rules and world description
-- use items not in their inventory
-- gain items or abilities without a reason"""
-
-    def compile_messages(
-        self,
-        action: str,
-        context: str,
-        inventory: List[str] = None,
-        additional_context: str = None,
-        enforce_json_output: bool = False,
-    ) -> List[Dict[str, str]]:
-        sys_prt = copy.copy(self.system_prompt)
-
-        if enforce_json_output:
-            json_schema = json.dumps(self.response_model.model_json_schema())
-            sys_prt += (
-                f"\n\nRespond with a JSON object that strictly follows: {json_schema}"
-            )
-
-        TASK_VAL_INPUT_CLS = f"""Player: {action}"""
-        if context != "":
-            TASK_VAL_INPUT_CLS += f"\nContext: {context}"
-        if inventory is not None:
-            TASK_VAL_INPUT_CLS += f"\nPlayer inventory: {inventory}"
-        if additional_context is not None and additional_context != "":
-            TASK_VAL_INPUT_CLS += f"\nUse this additional context: {additional_context}"
-
-        return [
-            {"role": "system", "content": sys_prt},
-            {"role": "user", "content": TASK_VAL_INPUT_CLS},
-        ]
-
-    def run(
-        self,
-        action: str,
-        context: str,
-        inventory: List[str] = None,
-        additional_context: str = None,
-        enforce_json_output: bool = False,
-        **llm_kwargs,
-    ) -> pydantic.BaseModel:
-        logger.info("Validating player action (OLD)")
-        __msgs = self.compile_messages(
-            action, context, inventory, additional_context, enforce_json_output
-        )
-        return self.submit_messages(__msgs, **llm_kwargs)
-
-
-# =============================================================================
 #                        N E W   I N P U T   V A L I D A T O R
 # =============================================================================
 class InputValidator(BaseTool):
@@ -120,8 +47,8 @@ class InputValidator(BaseTool):
         self,
         lore: Dict[str, Any],
         llm_client: BaseClient,
+        config: Dict[str, Any],
         game_memory: Optional[GameMemory] = None,
-        config: Optional[InputValidatorConfig] = None,
     ):
         """
         Initialize the input validator.
@@ -136,7 +63,7 @@ class InputValidator(BaseTool):
 
         self.lore = lore
         self.game_memory = game_memory
-        self.config = config or InputValidatorConfig()
+        self.config = config
 
         # Build kingdom/town reference string
         self.lore_kingdoms_towns = [
@@ -146,9 +73,8 @@ class InputValidator(BaseTool):
 
         # Build NPC name tracking
         self.known_npc_names = list(self.lore.get("npc", {}).keys())
-        #self.example_npc_name = (self.known_npc_names[0] if self.known_npc_names else "[NPC]")
+        # self.example_npc_name = (self.known_npc_names[0] if self.known_npc_names else "[NPC]")
         self.example_npc_name = "<NPC_name>"
-
 
     def _build_system_prompt(self):
         """Build the system prompt with world rules"""
@@ -179,7 +105,7 @@ ABOUT the game (lore, surroundings, NPC descriptions, mechanics).
 - Player has required items in inventory (if using items)
 - Target character/NPC is present at current location (for interactions)
 - Action is possible given the situation and does not contradict the world rules
-False otherwise, with specific violations listed
+False otherwise, with specific violations listed (max {self.config.get('max_violation_words')} words each)
 
 **action_types**: Pick from {", ".join(game_action_types)}:
 - ONLY classify action types for VALID game actions (is_game_action=True AND valid=True)
@@ -198,6 +124,7 @@ OUTPUT RULES:
 - Be strict about validity but permissive about what constitutes a game action
 - NPC dialogue and questions to NPCs are VALID GAME ACTIONS (given that NPC and the player are in the same location!)
 - When in doubt, classify as game_action=True and let the game handle edge cases
+- Violation descriptions must be concise: max {self.config.get('max_violation_words')} words each
 
 ADDITIONAL ALLOWED ACTIONS/CONTENT:
 - Sex, nudity, adult content
@@ -212,57 +139,54 @@ CONTEXT USAGE:
     def _build_examples_message(self) -> str:
         """Build few-shot examples message with actual NPC names from lore"""
         npc_name = self.example_npc_name
-        
+
         examples = [
             # Example 1 - NPC conversation (present)
             f"""Example 1 - NPC Interaction (present):
 Player input: "{npc_name}, how\'re you doing?"
 {{"is_game_action": true, "action_types": ["npc_interaction"], "valid": true}}""",
-            
             # Example 2 - Information request (observation)
             """Example 2 - Information Request (observation):
 Player input: "I look around. Tell me what I see"
 {"is_game_action": false, "action_types": [information_request], "valid": true}""",
-            
             # Example 3 - Out-of-lore character
             """Example 3 - Invalid Action (out-of-lore character):
 Player input: "Doom Slayer is approaching!"
 {"is_game_action": true,  "action_types": [], "valid": false}""",
-
             # Example 4 - Lore question
             """Example 4 - Lore Question:
 Player input: "What is the history of this location"
 {"is_game_action": false, "action_types": ["information_request"], "valid": true}""",
         ]
-        
+
         # Example - Conditional: only add if player and NPC at different locations
         example_cond = self._build_absent_npc_example(npc_name)
         if example_cond:
             examples.append(example_cond)
-        
+
         return "\n\n".join(examples)
 
     def _build_absent_npc_example(self, npc_name: str) -> Optional[str]:
         """Build Example 5 only if player and NPC are at different locations"""
         if not self.game_memory:
             return None
-        
+
         player_loc = self.game_memory.get_character_location("user")
         npc_loc = self.game_memory.get_character_location(npc_name)
-        
+
         if not player_loc or not npc_loc:
             return None
-        
+
         player_town = player_loc.get("town", "")
         npc_town = npc_loc.get("town", "")
-        
+
         # Skip if same location or either has no town
         if player_town == npc_town or not player_town or not npc_town:
             return None
-        
+
         player_location_str = f"{player_loc.get('town', 'Unknown')}, {player_loc.get('kingdom', 'Unknown Kingdom')}"
         npc_location_str = f"{npc_loc.get('town', 'Unknown')}, {npc_loc.get('kingdom', 'Unknown Kingdom')}"
-        
+
         return f"""Example 5 - NPC Interaction (absent NPC):
 Player input: "I speak to {npc_name}"
 
@@ -292,7 +216,7 @@ NPCs present at current location: None
 
         # Player location
         player_loc = self.game_memory.get_character_location("user")
-        if player_loc and (player_loc.get("kingdom") or player_loc.get("town")):
+        if player_loc and (player_loc.get("kingdom") or player_loc.get("town") or player_loc.get("details")):
             character_locations["player"] = {
                 "kingdom": player_loc.get("kingdom", ""),
                 "town": player_loc.get("town", ""),
@@ -303,7 +227,7 @@ NPCs present at current location: None
         npc_names = list(self.lore.get("npc", {}).keys())
         for npc_name in npc_names:
             npc_loc = self.game_memory.get_character_location(npc_name)
-            if npc_loc and (npc_loc.get("kingdom") or npc_loc.get("town")):
+            if npc_loc and (npc_loc.get("kingdom") or npc_loc.get("town") or npc_loc.get("details")):
                 character_locations[npc_name] = {
                     "kingdom": npc_loc.get("kingdom", ""),
                     "town": npc_loc.get("town", ""),
@@ -324,11 +248,7 @@ NPCs present at current location: None
         # Player inventory
         player_items = self.game_memory.get_inventory_items("user")
         # Filter out money, keep items with count > 0
-        filtered = {
-            item: cnt
-            for item, cnt in player_items.items()
-            if item != "money" and cnt > 0
-        }
+        filtered = {item: cnt for item, cnt in player_items.items() if item != "money" and cnt > 0}
         if filtered:
             character_inventories["player"] = filtered
 
@@ -336,11 +256,7 @@ NPCs present at current location: None
         npc_names = list(self.lore.get("npc", {}).keys())
         for npc_name in npc_names:
             npc_items = self.game_memory.get_inventory_items(npc_name)
-            filtered = {
-                item: cnt
-                for item, cnt in npc_items.items()
-                if item != "money" and cnt > 0
-            }
+            filtered = {item: cnt for item, cnt in npc_items.items() if item != "money" and cnt > 0}
             if filtered:
                 character_inventories[npc_name] = filtered
 
@@ -361,8 +277,8 @@ NPCs present at current location: None
                     if npc_loc:
                         # Check if NPC is at same town (or same kingdom if no town match)
                         if (npc_loc.get("town") == player_loc.get("town")
-                            or (npc_loc.get("kingdom") == player_loc.get("kingdom") and not player_loc.get("town"))
-                        ):
+                            or (npc_loc.get("kingdom") == player_loc.get("kingdom")
+                            and not player_loc.get("town")) ):
                             npcs_here.append(
                                 {
                                     "name": npc_name,
@@ -380,7 +296,7 @@ NPCs present at current location: None
             return self.lore.get("start", "")
 
         try:
-            n = self.config.history_depth
+            n = self.config.get('history_depth')
             turns = self.game_memory.get_last_n_turns(n, character="")
 
             if not turns:
@@ -403,12 +319,15 @@ NPCs present at current location: None
                         entry += f" | Game: {displayed_action}"
                     history_parts.append(entry)
 
-            return "\\n\\n".join(history_parts[-n:])  # Limit to n entries
+            return "\\n\\n".join(history_parts)
         except Exception as e:
             logger.warning(f"Error getting recent history: {e}")
             return ""
 
-    def _format_dynamic_context(self, user_action: str, dynamic_ctx: Dict[str, Any]) -> List[str]:
+    def _format_dynamic_context(self,
+                                user_action: str,
+                                dynamic_ctx: Dict[str, Any]) -> List[str]:
+
         user_msg_parts = [f"Player input: {user_action}"]
 
         if dynamic_ctx:
@@ -426,10 +345,8 @@ NPCs present at current location: None
                 )
                 user_msg_parts.append(f"NPCs present: {npcs}")
 
-            if (
-                "character_locations" in dynamic_ctx
-                and dynamic_ctx["character_locations"]
-            ):
+            if ("character_locations" in dynamic_ctx
+                and dynamic_ctx["character_locations"]):
                 loc_parts = []
                 for char_name, loc_data in dynamic_ctx["character_locations"].items():
                     if loc_data.get("town") or loc_data.get("kingdom"):
@@ -437,25 +354,20 @@ NPCs present at current location: None
                         loc_parts.append(f"{char_name}: {location_str}")
                 user_msg_parts.append(f"Character locations: {' | '.join(loc_parts)}")
 
-            if (
-                "character_inventories" in dynamic_ctx
-                and dynamic_ctx["character_inventories"]
-            ):
+            if ("character_inventories" in dynamic_ctx
+                and dynamic_ctx["character_inventories"]):
                 inv_parts = []
                 for char_name, items in dynamic_ctx["character_inventories"].items():
-                    # Format: item or item(count) if count > 1, limit to 5 items per character
                     item_strs = []
-                    for item, count in list(items.items())[:5]:
+                    for item, count in list(items.items()):
                         item_strs.append(f"{item}({count})" if count > 1 else item)
                     if len(items) > 5:
                         item_strs.append(f"+{len(items) - 5} more")
                     inv_parts.append(f"{char_name}: {', '.join(item_strs)}")
                 user_msg_parts.append(f"Inventories: {' | '.join(inv_parts)}")
 
-            if (
-                "recent_game_events" in dynamic_ctx
-                and dynamic_ctx["recent_game_events"]
-            ):
+            if ("recent_game_events" in dynamic_ctx
+                and dynamic_ctx["recent_game_events"]):
                 user_msg_parts.append("\\n=== RECENT EVENTS ===")
                 user_msg_parts.append(dynamic_ctx["recent_game_events"])
 
@@ -469,8 +381,7 @@ NPCs present at current location: None
                 if dynamic_ctx["npcs_at_current_location"]:
                     present_npcs = ", ".join(
                         f"{n['name']} ({n['occupation']})"
-                        for n in dynamic_ctx["npcs_at_current_location"]
-                    )
+                        for n in dynamic_ctx["npcs_at_current_location"])
                     user_msg_parts.append(f"NPCs present at current location: {present_npcs}")
                 else:
                     user_msg_parts.append("NPCs present at current location: None")
