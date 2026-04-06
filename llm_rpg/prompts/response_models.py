@@ -17,8 +17,8 @@ game_action_types = [
 ]
 
 
-class ValidateClassifyAction(BaseModel):
-    """Validator response model for player input"""
+class GatewayResponse(BaseModel):
+    """InputGateway response model for the user input"""
 
     is_game_action: bool = Field(
         description="True if player performs action WITHIN game world. False for questions ABOUT the game\
