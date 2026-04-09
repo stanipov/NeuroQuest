@@ -24,7 +24,6 @@ from llm_rpg.prompts.lore_generation import (
     gen_kingdom_msgs,
     gen_towns_msgs,
     gen_human_char_msgs,
-    gen_condition_end_game,
     gen_npc_behavior_rules,
     gen_entry_point_msg,
     kingdoms_traits,
@@ -232,14 +231,6 @@ class LoreGeneratorGvt:
                 "town": town_name,
             }
 
-    def generate_end_game_conditions(self, num_conditions: int = 3):
-        self.world_generator.gen_end_game_conditions(
-            player_desc=self.lore["human_player"],
-            player_loc=self.lore["start_location"]["human"]["kingdom"],
-            num_conditions=num_conditions,
-        )
-        self.lore.update(self.world_generator.game_lore)
-        self.game_gen_params.update(self.world_generator.game_gen_params)
 
     def generate_npc_action_rules(
         self, num_rules_per_category: int = 3, **client_kw
@@ -565,49 +556,6 @@ class GenerateWorld:
                 "max_retries": max_retries,
             }
 
-    def gen_end_game_conditions(
-        self,
-        player_desc: Dict[str, str],
-        player_loc: str,
-        num_conditions: int,
-    ) -> None:
-        """
-        Generates conditions to win and loose the game given the description of the human player
-        :param player_loc: starting location of the human player
-        :param player_desc: description of the human player
-        :param num_conditions: number of conditions
-        :return:
-        """
-
-        kinds = ["win", "loose"]
-
-        self.game_lore["end_game"] = {}
-        for kind in kinds:
-            logger.info(f"Generating {num_conditions} conditions to {kind}")
-            try:
-                cond_gen_msgs = gen_condition_end_game(
-                    self.game_lore,
-                    player_desc,
-                    player_loc,
-                    num_conditions,
-                    kind,
-                )
-                raw_response = self.client.chat(cond_gen_msgs)
-                self.game_lore["end_game"][kind] = raw_response["message"]
-                self.game_gen_params["end_game"][kind] = {
-                    "model": self.client.model_name,
-                    "messages": cond_gen_msgs,
-                }
-
-            except Exception as e:
-                logger.error(
-                    f'Could not generate conditions to "{kind}" with "{e}" error'
-                )
-                raise ValueError(
-                    f'Could not generate conditions to "{kind}" with "{e}" error'
-                )
-        logger.info("Done")
-
 
 class GenerateCharacter:
     global CHAR_DESC_STRUCT
@@ -657,6 +605,9 @@ class GenerateCharacter:
         if kind == "human":
             characters = self.__gen_playable_char(game_lore, **kwargs)
             logger.info(f"Generated {len(characters.keys())} characters")
+        if kind == "npc":
+            characters = self.__gen_npc(game_lore, **kwargs)
+            logger.info(f"Generated {len(characters.keys())} characters")
 
         if not characters and characters != {}:
             logger.warning("Generation was not successful")
@@ -667,6 +618,10 @@ class GenerateCharacter:
                 self.characters_kinds[key] = kind
 
         return characters
+
+    def __gen_npc(self, game_lore, **kwargs):
+        return {}
+
 
     def __gen_playable_char(
         self, game_lore: Dict[str, str], **kwargs

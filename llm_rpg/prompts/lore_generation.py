@@ -396,44 +396,6 @@ The character should fit the {npc_occupation} role logically. Inventory items sh
     ]
 
 
-def gen_condition_end_game(
-    game_lore: Dict[str, Any],
-    player_desc: Dict[str, str],
-    human_loc: str,
-    num_conditions: int,
-    condition: str,
-) -> List[Dict[str, str]]:
-    """
-    Generates messages to create conditions to win or loose the game
-
-    :param game_lore: condensed game lore, not what is shown to the player
-    :param player_desc: a dictionary with description of the human player
-    :param human_loc: starting kingdom of the human player
-    :param num_conditions: number of conditions to win/loose
-    :param condition: win or loose.
-    :return: messages (aka list of dictionaries)
-    """
-    global LORE_GEN_SYS_PRT
-
-    conditions_prt = f"""
-Generate {num_conditions} conditions to {condition} for a human player
-{player_desc}
-
-This character acts in this world:
-World Name: {game_lore["world"]["name"]}
-World Description: {game_lore["world"]["description"]}
-
-Player's kingdom:
-{game_lore["kingdoms"][human_loc]}
-
-Provide only a numbered list without any additional words"""
-
-    return [
-        {"role": "system", "content": LOC_SYS_PRT},
-        {"role": "user", "content": entry_prt},
-    ]
-
-
 def gen_npc_behavior_rules(
     npc: Dict[str, str], num_rules_per_category: int = 3
 ) -> List[Dict[str, str]]:
