@@ -7,15 +7,28 @@ from typing import Optional, List, Dict
 
 
 # ------------------------------- Validate and classify player's response -------------------------------
-game_action_types = [
-    "inventory change",      # shall we call inventory update tool?
-    "mental state change",   # shall we call mental state update tool?
-    "physical state change", # shall we call physical state update tool?
-    "relocation",            # shall we call location update tool
-    "npc_interaction",       # shall we call NPC AI tool?
-    "information_request",   # shall we route directly to the game response?
-]
+game_action_types = {
+    # --- This will be checked after final response ---
+    # shall we call inventory update tool?
+    #"inventory change": "Picking up, dropping, using, or trading items",
 
+    # --- This will be checked after final response ---
+    # shall we call mental state update tool?
+    #"mental state change": "Emotional reactions, learning, realizing something",
+
+    # --- This will be checked after final response ---
+    # shall we call physical state update tool?
+    #"physical state change": "Getting hurt, healing, resting, eating/drinking",
+
+    # shall we call location update tool
+    "relocation": "Moving to a different location",
+
+    # shall we call NPC AI tool?
+    "npc_interaction": "Player directly addresses/interacts with an NPC by name or by context",
+
+    # shall we route directly to the game response?
+    "information_request": "Looking around, asking about surroundings, or asking any clarification questions"
+}
 
 class GatewayResponse(BaseModel):
     """InputGateway response model for the user input"""
@@ -23,62 +36,21 @@ class GatewayResponse(BaseModel):
     is_game_action: bool = Field(
         description="True if player performs action WITHIN game world. False for questions ABOUT the game\
          (lore, surroundings, NPC descriptions, mechanics).",
-        default=True,
-    )
+        default=True)
 
     valid: bool = Field(
         description="True if the game action follows all rules. Fal1se if it violates world rules, uses unavailable \
         items, contradicts established facts, or attempts impossible actions.",
-        default=True,
-    )
+        default=True)
 
-    violation_details: str = Field(
-        description="Detailed description of violations. Only populated when valid=False",
-        default=""
-    )
+    violation_details:str = Field(
+        description="Brief description of violations. Only populated when valid=False",
+        default="")
 
     action_types: List[str] = Field(
-        description=f"Types of game actions detected. Pick from {game_action_types}. \
+        description=f"Types of game actions detected. Pick from {game_action_types.keys()}. \
         MUST include at least one type if valid=True. Leave empty [] if the action is invalid (valid=False)",
-        default_factory=list,
-    )
-
-
-# ------------------------------- Action Proposals -------------------------------
-class ActionProposal(BaseModel):
-    """A proposed interpretation of player's intended action"""
-
-    action_type: str = Field(
-        description=f"Type of action. Pick from {game_action_types}",
-    )
-    target: Optional[str] = Field(
-        description="Target of the action (NPC name, location, item). None if no specific target.",
-        default=None,
-    )
-
-    intent: str = Field(
-        description="What the player is trying to accomplish. Be concise but specific.",
-    )
-
-    confidence: float = Field(
-        description="Confidence score 0.0-1.0 that this interpretation is correct",
-        ge=0.0,
-        le=1.0,
-    )
-
-
-class ActionProposals(BaseModel):
-    """Container for proposed action interpretations"""
-
-    proposals: List[ActionProposal] = Field(
-        description="List of possible action interpretations, sorted by confidence (highest first)",
-        default_factory=list,
-    )
-
-    primary_interpretation: Optional[str] = Field(
-        description="Natural language summary of the most likely interpretation",
-        default=None,
-    )
+        default_factory=list)
 
 
 # ------------------------------- Inventory Changes -------------------------------
@@ -86,9 +58,7 @@ class InventoryItemChange(BaseModel):
     """Inventory update unit"""
 
     item: str = Field(validation_alias="name", description="Item name")
-    change_amount: int = Field(
-        validation_alias="amount", default=0, description="Number of items changed"
-    )
+    change_amount: int = Field(validation_alias="amount", default=0, description="Number of items changed")
     subject: str = Field(description="Who's inventory is changed?", default="")
     source: str = Field(description="Who provided this inventory item?", default="")
 
@@ -96,9 +66,7 @@ class InventoryItemChange(BaseModel):
 class InventoryUpdates(BaseModel):
     """All inventory updates"""
 
-    itemUpdates: List[InventoryItemChange] = Field(
-        default=[], description="List of inventory updates"
-    )
+    itemUpdates: List[InventoryItemChange] = Field(default=[], description="List of inventory updates")
 
 
 # ------------------------------- Player's state -------------------------------

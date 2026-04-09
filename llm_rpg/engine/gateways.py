@@ -64,7 +64,7 @@ YOUR TASK: Analyze player input and determine:
 3. What type(s) of action is it?
 
 WORLD RULES:
-{json.dumps(world_outline, indent=2)}
+{json.dumps(world_outline)}
 
 KNOWN LOCATIONS:
 {"\n".join(self.lore_kingdoms_towns)}
@@ -83,18 +83,13 @@ ABOUT the game (lore, surroundings, NPC descriptions, mechanics).
 - Action is possible given the situation and does not contradict the world rules
 False otherwise, with specific violations listed (max {self.config.get('max_violation_words')} words each)
 
-**action_types**: Pick from {", ".join(game_action_types)}:
+**action_types**: Pick from {", ".join(list(game_action_types.keys()))}:
 - ONLY classify action types for VALID game actions (is_game_action=True AND valid=True)
 - Leave as empty [] if the action is invalid or not a game action
 - No action classification needed for invalid actions - just report the violation 
 
 ACTION TYPES EXPLANATION:
-- "inventory change": Picking up, dropping, using, or trading items
-- "mental state change": Emotional reactions, learning, realizing something
-- "physical state change": Getting hurt, healing, resting, eating/drinking
-- "relocation": Moving to a different location
-- "npc_interaction": Player directly addresses/interacts with an NPC by name or by context
-- "information_request": Looking around, asking about surroundings, seeking lore information
+{'-'.join([ f"- {x}\n" for key, x in  game_action_types.items()])}
 
 OUTPUT RULES:
 - Be strict about validity but permissive about what constitutes a game action
@@ -119,19 +114,19 @@ CONTEXT USAGE:
             # Example 1 - NPC conversation (present)
             f"""Example 1 - NPC Interaction (present):
 Player input: "{self.npc_name_placeholder}, how\'re you doing?"
-{{"is_game_action": true, "action_types": ["npc_interaction"], "valid": true}}""",
+{{"is_game_action":true,"action_types":["npc_interaction"],"valid":true}}""",
             # Example 2 - Information request (observation)
             """Example 2 - Information Request (observation):
 Player input: "I look around. Tell me what I see"
-{"is_game_action": false, "action_types": [information_request], "valid": true}""",
+{"is_game_action":false,"action_types":[information_request],"valid":true}""",
             # Example 3 - Out-of-lore character
             """Example 3 - Invalid Action (out-of-lore character):
 Player input: "Doom Slayer is approaching!"
-{"is_game_action": true,  "action_types": [], "valid": false}""",
+{"is_game_action":true,"action_types":[],"valid":false}""",
             # Example 4 - Lore question
             """Example 4 - Lore Question:
 Player input: "What is the history of this location"
-{"is_game_action": false, "action_types": ["information_request"], "valid": true}""",
+{"is_game_action":false,"action_types":["information_request"],"valid":true}""",
         ]
 
         # Example - Conditional: only add if player and NPC at different locations
@@ -175,7 +170,7 @@ Player input: "I speak to {npc_name}"
 Location: {player_location_str}
 Character locations: player: {player_location_str} | {npc_name}: {npc_location_str}
 NPCs present at current location: None
-{{"is_game_action": true, "action_types": ["npc_interaction"], "valid": false}}"""
+{{"is_game_action":true,"action_types":["npc_interaction"],"valid":false}}"""
 
 
     def _build_dynamic_context(self, message: str) -> Dict[str, Any]:
