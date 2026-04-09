@@ -33,7 +33,6 @@ class LoreGenerationConfig(BaseModel):
 class GameConfig(BaseModel):
     auto_save: bool = True
     max_chat_history: int = 100
-    npc_chat_history: int = 20
     aux_chat_history: int = 100
     max_generation_retries: int = 3
     temperature_cooldown_step: float = 0.1
@@ -68,6 +67,14 @@ class InputValidatorConfig(BaseModel):
     )
 
 
+class NPC_AI_Config(BaseModel):
+    npc_chat_history: int = 200
+    max_generation_retries: int = 3
+    temperature_cooldown_step: float = 0.1
+    temperature_min: float = 0.5
+    temperature: float = 0.7
+
+
 class AppConfig(BaseModel):
     dotenv_path: Optional[str] = None
     paths: PathsConfig = Field(default_factory=PathsConfig)
@@ -76,6 +83,7 @@ class AppConfig(BaseModel):
     game: GameConfig = Field(default_factory=GameConfig)
     temperatures: TemperatureConfig = Field(default_factory=TemperatureConfig)
     input_validator: InputValidatorConfig = Field(default_factory=InputValidatorConfig)
+    npc_ai: NPC_AI_Config = Field(default_factory=NPC_AI_Config)
 
     class Config:
         extra = "ignore"
