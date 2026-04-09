@@ -10,25 +10,22 @@ from typing import Optional, List, Dict
 game_action_types = {
     # --- This will be checked after final response ---
     # shall we call inventory update tool?
-    #"inventory change": "Picking up, dropping, using, or trading items",
-
+    # "inventory change": "Picking up, dropping, using, or trading items",
     # --- This will be checked after final response ---
     # shall we call mental state update tool?
-    #"mental state change": "Emotional reactions, learning, realizing something",
-
+    # "mental state change": "Emotional reactions, learning, realizing something",
     # --- This will be checked after final response ---
     # shall we call physical state update tool?
-    #"physical state change": "Getting hurt, healing, resting, eating/drinking",
-
+    # "physical state change": "Getting hurt, healing, resting, eating/drinking",
+    # --- This will be checked after final response ---
     # shall we call location update tool
-    "relocation": "Moving to a different location",
-
+    # "relocation": "Moving to a different location",
     # shall we call NPC AI tool?
     "npc_interaction": "Player directly addresses/interacts with an NPC by name or by context",
-
     # shall we route directly to the game response?
-    "information_request": "Looking around, asking about surroundings, or asking any clarification questions"
+    "information_request": "Looking around, asking about surroundings, or asking any clarification questions",
 }
+
 
 class GatewayResponse(BaseModel):
     """InputGateway response model for the user input"""
@@ -36,21 +33,25 @@ class GatewayResponse(BaseModel):
     is_game_action: bool = Field(
         description="True if player performs action WITHIN game world. False for questions ABOUT the game\
          (lore, surroundings, NPC descriptions, mechanics).",
-        default=True)
+        default=True,
+    )
 
     valid: bool = Field(
         description="True if the game action follows all rules. Fal1se if it violates world rules, uses unavailable \
         items, contradicts established facts, or attempts impossible actions.",
-        default=True)
+        default=True,
+    )
 
-    violation_details:str = Field(
+    violation_details: str = Field(
         description="Brief description of violations. Only populated when valid=False",
-        default="")
+        default="",
+    )
 
     action_types: List[str] = Field(
         description=f"Types of game actions detected. Pick from {game_action_types.keys()}. \
-        MUST include at least one type if valid=True. Leave empty [] if the action is invalid (valid=False)",
-        default_factory=list)
+    MUST include at least one type if valid=True. Leave empty [] if the action is invalid (valid=False)",
+        default_factory=list,
+    )
 
 
 # ------------------------------- Inventory Changes -------------------------------
@@ -58,7 +59,9 @@ class InventoryItemChange(BaseModel):
     """Inventory update unit"""
 
     item: str = Field(validation_alias="name", description="Item name")
-    change_amount: int = Field(validation_alias="amount", default=0, description="Number of items changed")
+    change_amount: int = Field(
+        validation_alias="amount", default=0, description="Number of items changed"
+    )
     subject: str = Field(description="Who's inventory is changed?", default="")
     source: str = Field(description="Who provided this inventory item?", default="")
 
@@ -66,7 +69,9 @@ class InventoryItemChange(BaseModel):
 class InventoryUpdates(BaseModel):
     """All inventory updates"""
 
-    itemUpdates: List[InventoryItemChange] = Field(default=[], description="List of inventory updates")
+    itemUpdates: List[InventoryItemChange] = Field(
+        default=[], description="List of inventory updates"
+    )
 
 
 # ------------------------------- Player's state -------------------------------
@@ -79,13 +84,10 @@ class PhysicalCondition(BaseModel):
 
 
 class PlayerState(BaseModel):
-    alive: bool = Field(default=True, description="Alive? True/False")
     physical: list[PhysicalCondition] = Field(
-        validation_alias="physical_state", default=[], description="Physical condition"
+        default=[], description="Physical condition"
     )
-    mental: list[MentalCondition] = Field(
-        validation_alias="mental_state", default=[], description="Mental condition"
-    )
+    mental: list[MentalCondition] = Field(default=[], description="Mental condition")
 
 
 # ------------------------------- Player's location -------------------------------
@@ -124,9 +126,6 @@ class NPCResponseModel(BaseModel):
     )
     state: PlayerState | None = Field(
         description="Determine player's state", default=None
-    )
-    inventory_update: InventoryUpdates | None = Field(
-        description="Detect inventory updates", default=None
     )
     location: PlayerLocation | None = Field(
         description="Player's current location and possibly new destination",
@@ -183,6 +182,66 @@ class CharacterModel(BaseModel):
     )
     weaknesses: str = Field(
         description="Character's notable weak points (1 sentence, up to 10 words)",
+        max_length=100,
+    )
+    money: int = Field(
+        description="Starting gold coins",
+        ge=0,
+        le=10000,
+    )
+    inventory: List[str] = Field(
+        description="List of starting item names (functional, 1-2 words each)",
+        min_length=0,
+        max_length=10,
+    )
+
+
+class NPCCharacterModel(BaseModel):
+    """Structured character data for NPCs (companion characters)"""
+
+    name: str = Field(description="NPC's unique name (1-3 words)", max_length=50)
+    gender: str = Field(description="NPC's gender", pattern="^(male|female)$")
+    occupation: str = Field(
+        description="NPC's profession/role",
+        max_length=50,
+    )
+    age: int = Field(
+        description="NPC's age in years",
+        ge=0,
+        le=150,
+    )
+    biography: str = Field(
+        description="NPC's backstory/history (1-2 sentences)", max_length=200
+    )
+    deeper_pains: str = Field(
+        description="NPC's emotional wounds or traumas (1 sentence, up to 10 words)",
+        max_length=100,
+    )
+    deeper_desires: str = Field(
+        description="NPC's deepest wants and motivations (1 sentence, up to 10 words)",
+        max_length=100,
+    )
+    motivation_to_join: str = Field(
+        description="NPC's reason to join and support the human player as a companion (1 sentence, up to 15 words)",
+        max_length=150,
+    )
+    physical: str = Field(
+        description="Strength, dexterity, endurance as descriptive text (1 sentence)",
+        max_length=100,
+    )
+    mental: str = Field(
+        description="Intelligence and wisdom as descriptive text (1 sentence)",
+        max_length=100,
+    )
+    communication: str = Field(
+        description="Personality and persuasion ability (5 words max)", max_length=50
+    )
+    strengths: str = Field(
+        description="NPC's notable strong points (1 sentence, up to 10 words)",
+        max_length=100,
+    )
+    weaknesses: str = Field(
+        description="NPC's notable weak points (1 sentence, up to 10 words)",
         max_length=100,
     )
     money: int = Field(

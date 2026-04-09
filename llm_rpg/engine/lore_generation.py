@@ -24,6 +24,7 @@ from llm_rpg.prompts.lore_generation import (
     gen_kingdom_msgs,
     gen_towns_msgs,
     gen_human_char_msgs,
+    gen_npc_character_msgs,
     gen_npc_behavior_rules,
     gen_entry_point_msg,
     kingdoms_traits,
@@ -32,6 +33,7 @@ from llm_rpg.prompts.response_models import (
     WorldRulesModel,
     NPCBehaviorRulesModel,
     CharacterModel,
+    NPCCharacterModel,
 )
 
 from llm_rpg.templates.base_client import BaseClient
@@ -208,7 +210,7 @@ class LoreGeneratorGvt:
 
         ans = self.char_gen.gen_characters(
             self.lore,
-            "human",
+            "npc",
             num_chars=num_chars,
             kingdom_name=kingdom_name,
             town_name=town_name,
@@ -230,7 +232,6 @@ class LoreGeneratorGvt:
                 "kingdom": kingdom_name,
                 "town": town_name,
             }
-
 
     def generate_npc_action_rules(
         self, num_rules_per_category: int = 3, **client_kw
@@ -603,42 +604,41 @@ class GenerateCharacter:
         characters = None
 
         if kind == "human":
-            characters = self.__gen_playable_char(game_lore, **kwargs)
-            logger.info(f"Generated {len(characters.keys())} characters")
-        if kind == "npc":
-            characters = self.__gen_npc(game_lore, **kwargs)
-            logger.info(f"Generated {len(characters.keys())} characters")
+            characters = self.__gen_character_card(game_lore, "human", **kwargs)
+            logger.info(f"Generated {len(characters.keys())} human character(s)")
+        elif kind == "npc":
+            characters = self.__gen_character_card(game_lore, "npc", **kwargs)
+            logger.info(f"Generated {len(characters.keys())} NPC character(s)")
 
         if not characters and characters != {}:
             logger.warning("Generation was not successful")
         else:
             self.characters.update(characters)
-            # update the mapping
             for key in characters:
                 self.characters_kinds[key] = kind
 
         return characters
 
     def __gen_npc(self, game_lore, **kwargs):
-        return {}
+        return self.__gen_character_card(game_lore, "npc", **kwargs)
 
-
-    def __gen_playable_char(
-        self, game_lore: Dict[str, str], **kwargs
+    def __gen_character_card(
+        self, game_lore: Dict[str, str], character_type: str, **kwargs
     ) -> Dict[str, Any]:
-        """Generates ONE playable character using structured output"""
+        """Generates ONE character (human or NPC) using structured output
+
+        :param character_type: 'human' or 'npc'
+        :return: Dict with character name as key and character data as value
+        """
 
         kingdom_name = kwargs.get("kingdom_name", "")
         town_name = kwargs.get("town_name", "")
         max_retries = kwargs.pop("max_retries", 3)
 
         names2avoid = list(self.characters.keys())
-        logger.info(f"Generating 1 character, avoiding names: {names2avoid}")
-
-        char_gen_msgs = gen_human_char_msgs(
-            game_lore, kingdom_name, town_name, num_chars=1, avoid_names=names2avoid
+        logger.info(
+            f"Generating 1 {character_type} character, avoiding names: {names2avoid}"
         )
-        self.char_gen_params["characters"] = char_gen_msgs
 
         # Extract client kwargs (remove non-client parameters)
         client_kw = {
@@ -647,29 +647,55 @@ class GenerateCharacter:
             if k not in ["char_desc_struct", "num_chars", "kingdom_name", "town_name"]
         }
 
-        try:
-            response = generate_with_retry(
-                client=self.client,
-                messages=char_gen_msgs,
-                response_model=CharacterModel,
-                max_retries=max_retries,
-                fallback_value=None,  # No fallback - raise exception on failure
-                component_name="Human Character",
-                temperature_cooldown_step=self.temp_cooldown_step,
-                temperature_min=self.temp_min,
-                **client_kw,
+        # Set up generation parameters based on character type
+        if character_type == "human":
+            char_gen_msgs = gen_human_char_msgs(
+                game_lore, kingdom_name, town_name, num_chars=1, avoid_names=names2avoid
+            )
+            response_model = CharacterModel
+            component_name = "Human Character"
+        elif character_type == "npc":
+            human_player = game_lore.get("human_player", {})
+            char_gen_msgs = gen_npc_character_msgs(
+                game_lore,
+                kingdom_name,
+                town_name,
+                human_player,
+                avoid_names=names2avoid,
+            )
+            response_model = NPCCharacterModel
+            component_name = "NPC Character"
+        else:
+            logger.error(f"Unknown character_type: {character_type}")
+            raise ValueError(
+                f"Unknown character_type: {character_type}. Expected 'human' or 'npc'"
             )
 
-            # Convert to dict (already done by generate_with_retry via model_dump())
-            char_data = response["message"]
+        self.char_gen_params["characters"] = char_gen_msgs
 
-            character_name = char_data["name"]
+        # Single generate_with_retry() call for both character types
+        response = generate_with_retry(
+            client=self.client,
+            messages=char_gen_msgs,
+            response_model=response_model,
+            max_retries=max_retries,
+            fallback_value=None,
+            component_name=component_name,
+            temperature_cooldown_step=self.temp_cooldown_step,
+            temperature_min=self.temp_min,
+            **client_kw,
+        )
+
+        char_data = response["message"]
+        character_name = char_data["name"]
+
+        if character_type == "human":
             logger.info(
                 f"Human Character generated: {character_name}, age={char_data['age']}, money={char_data['money']}"
             )
+        else:
+            logger.info(
+                f"NPC Character generated: {character_name}, age={char_data['age']}, occupation={char_data['occupation']}"
+            )
 
-            return {character_name: char_data}
-
-        except Exception as e:
-            logger.error(f"Failed to generate human character: {e}")
-            raise
+        return {character_name: char_data}

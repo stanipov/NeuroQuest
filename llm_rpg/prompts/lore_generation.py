@@ -345,50 +345,49 @@ def gen_npc_character_msgs(
     game_lore: Dict[str, Any],
     kingdom_name: str,
     town_name: str,
-    npc_occupation: str,
-    npc_goal: str,
+    human_player: Dict[str, Any],
     avoid_names: List[str] = [],
 ) -> List[Dict[str, Any]]:
-    """Generates messages to create ONE NPC character"""
+    """Generates messages to create ONE NPC companion character"""
 
-    # Generate random bounds for this NPC
     age_min = random.randint(18, 30)
     age_max = random.randint(age_min + 10, age_min + 40)
     money_min = random.randint(100, 400)
     money_max = random.randint(money_min + 200, 1000)
 
-    world_type = game_lore.get("world", {}).get("type", "fantasy")
+    user_prompt = f"""Create ONE NPC companion character who will join the human player on their adventure.
 
-    user_prompt = f"""Create ONE NPC character who is a {npc_occupation} in the given kingdom and town.
-
+WORLD CONTEXT:
 World Name: {game_lore["world"]["name"]}
 World Description: {game_lore["world"]["description"]}
 
 The kingdom: {dict_2_str(game_lore["kingdoms"][kingdom_name])}
 The town: {dict_2_str(game_lore["towns"][kingdom_name][town_name])}
 
-NPC Context:
-- Occupation: {npc_occupation}
-- Goal: {npc_goal}
+HUMAN PLAYER (the NPC will companion):
+{dict_2_str(human_player)}
+
+NPC INSTRUCTIONS:
+Create an interesting NPC companion who lives in this town and will join the human player's journey. Focus on creating a character with depth who has genuine reasons to become a companion.
 
 The NPC should include:
 - A unique name (1-3 words) NOT in this banned list: {", ".join(avoid_names) if avoid_names else "none"}
 - Gender: male or female only
-- Occupation: {npc_occupation}
+- Occupation: appropriate for the world setting
 - Age between {age_min} and {age_max} years
-- 1-2 sentence backstory related to their occupation
+- Biography/history: 1-2 sentences about their background
 - Emotional wounds (up to 10 words)
-- Deepest motivations (up to 10 words)
-- Goal: {npc_goal}
+- Deepest desires/motivations (up to 10 words)
+- Motivation to join: Why this NPC wants to join and support the human player as a companion
 - Physical attributes (strength, dexterity, endurance)
 - Mental attributes (intelligence, wisdom)
 - Communication style (5 words max)
-- Strong points related to occupation
-- Weak points (up to 10 words)
+- Notable strengths (up to 10 words)
+- Notable weaknesses (up to 10 words)
 - Starting gold between {money_min} and {money_max} coins
-- Logical starting inventory for their occupation (functional item names, 1-2 words each, max 10 items)
+- Logical starting inventory (functional item names, 1-2 words each, max 10 items)
 
-The character should fit the {npc_occupation} role logically. Inventory items should match their occupation and goal."""
+IMPORTANT: The NPC does NOT have their own epic goal. They are a companion who supports the human player. Focus on their biography and motivation to join as a faithful companion."""
 
     return [
         {"role": "system", "content": LORE_GEN_SYS_PRT},
