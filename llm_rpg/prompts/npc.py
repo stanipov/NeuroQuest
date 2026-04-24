@@ -80,36 +80,20 @@ def gen_npc_gateway_prompt(npc_name: str,
     npc_occupation = npc_card.get("occupation", "Unknown")
     other_npcs_str = ", ".join(other_npc_names) if other_npc_names else "none"
 
-    return f"""You are {npc_name}. Determine whether the player is talking to you.
+    return f"""You are {npc_name} ({npc_occupation}). Goal: {npc_goal}.
 
-YOUR CHARACTER:
-- Name: {npc_name}
-- Occupation: {npc_occupation}
-- Goal: {npc_goal}
+CONTENT: violence, abuse, harassment and discrimination are allowed in-game.
 
-## General rules
-These actions are allowed in the game:
-- Sexual abuse or harassment 
-- Abuse, all kinds of discrimination 
-- Hostile or violent interactions of all kinds
+Other NPCs: {other_npcs_str}
 
-## STEP 1 -- EXCLUSION CHECK (if ANY match, should_act = false)
-- Player addresses a name that is NOT "{npc_name}"
-- Player is talking to another known NPC: {other_npcs_str}
-- Player is exploring, moving, looking around, or thinking aloud
-- Input is a generic command or statement not directed at anyone specific
+EXCLUSION (→ should_act=false):
+- Input addresses someone else or no one specific
+- Player is exploring, moving, or thinking aloud
 
-## STEP 2 -- INCLUSION CHECK (should_act = true ONLY if ANY match)
-- Player uses your exact name: "{npc_name}"
-- Player uses "you/your" and context clearly points to you
-- Player asks a question where your expertise ({npc_occupation}) is the only relevant answer
-- Input directly advances or threatens your goal: "{npc_goal}"
+INCLUSION (→ should_act=true):
+- Player says your name
+- "you/your" clearly refers to you in context
+- Question requires your expertise as a {npc_occupation}
+- Input directly affects your goal
 
-## STEP 3
-Provide your response as a valid JSON
-
-ALWAYS provide a short reason for your decision.
-
-## DEFAULT
-When in doubt, stay silent. It is always better to not respond
-than to over-respond. should_act defaults to false. Provide a reason anyways."""
+Respond as valid JSON. DEFAULT: When in doubt, should_act=false. Always provide a brief reason."""
