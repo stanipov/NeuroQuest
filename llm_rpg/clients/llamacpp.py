@@ -28,9 +28,9 @@ class LocalLLMClient(BaseClient):
         self.client = OpenAI(base_url=base_url, api_key=api_key)
 
     def chat(self, messages: List[Dict[Any, Any]], *args, **kwargs) -> Dict[str, Any]:
-        response = self.client.chat.completions.create(
-            model=self.model_name, messages=messages, **kwargs
-        )
+        response = self.client.chat.completions.create(model=self.model_name,
+                                                       messages=messages,
+                                                       **kwargs)
 
         return {
             "message": response.choices[0].message.content,
@@ -42,10 +42,12 @@ class LocalLLMClient(BaseClient):
             },
         }
 
-    def struct_output(
-        self, messages: List[Dict[Any, Any]], response_model: BaseModel, **kwargs
-    ) -> Any:
+    def struct_output(self,
+                      messages: List[Dict[Any, Any]],
+                      response_model: BaseModel,
+                      **kwargs) -> Any:
         struct_system = []
+
         try:
             struct_system = self.enforce_struct_output(response_model)
         except Exception as e:
@@ -61,9 +63,10 @@ class LocalLLMClient(BaseClient):
             # Prepend struct system to messages
             final_messages = struct_system + messages
 
-        response = self.client.chat.completions.create(
-            model=self.model_name, messages=final_messages, **kwargs
-        )
+        response = self.client.chat.completions.create(model=self.model_name,
+                                                        messages=final_messages,
+                                                        response_format={"type": "json_object"},
+                                                        **kwargs)
         raw_content = response.choices[0].message.content
         clean_json = self.extract_json_from_markdown(raw_content)
         structured = response_model.parse_raw(clean_json)
@@ -78,10 +81,12 @@ class LocalLLMClient(BaseClient):
         }
         return result
 
-    def stream(self, messages: List[Dict[Any, Any]], **kwargs) -> Any:
-        stream = self.client.chat.completions.create(
-            model=self.model_name, messages=messages, stream=True, **kwargs
-        )
+    def stream(self,
+               messages: List[Dict[Any, Any]], **kwargs) -> Any:
+
+        stream = self.client.chat.completions.create(model=self.model_name,
+                                                     messages=messages,
+                                                     stream=True, **kwargs)
         for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta["content"]
