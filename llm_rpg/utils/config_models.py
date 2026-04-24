@@ -49,26 +49,25 @@ class TemperatureConfig(BaseModel):
 
 class InputValidatorConfig(BaseModel):
     """Configuration for input validator"""
-    history_depth: int = Field(
-        default=3,
-        ge=1,
-        le=20,
-        description="Number of game turns to include in context"
-    )
-    include_npc_locations: bool = Field(
-        default=True,
-        description="Include NPCs at current location in context"
-    )
-    max_violation_words: int = Field(
-        default=10,
-        ge=3,
-        le=50,
-        description="Max words per violation description"
-    )
+    history_depth: int = Field(default=3,
+                               ge=1,
+                               le=20,
+                               description="Number of game turns to include in context")
+    include_npc_locations: bool = Field(default=True,
+                                        description="Include NPCs at current location in context")
+    max_violation_words: int = Field(default=10,
+                                     ge=3,
+                                     le=50,
+                                     description="Max words per violation description")
 
 
 class NPC_AI_Config(BaseModel):
     npc_chat_history: int = 200
+    gateway_history_depth: int = Field(default=3,
+                                       ge=1,
+                                       le=20,
+                                       description="Number of turns to include into gateway context")
+    gateway_temperature: float = 0.7
     max_generation_retries: int = 3
     temperature_cooldown_step: float = 0.1
     temperature_min: float = 0.5

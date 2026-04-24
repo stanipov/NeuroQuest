@@ -30,28 +30,20 @@ game_action_types = {
 class GatewayResponse(BaseModel):
     """InputGateway response model for the user input"""
 
-    is_game_action: bool = Field(
-        description="True if player performs action WITHIN game world. False for questions ABOUT the game\
-         (lore, surroundings, NPC descriptions, mechanics).",
-        default=True,
-    )
+    is_game_action: bool = Field(description="True if player performs action WITHIN game world. \
+False for questions ABOUT the game (lore, surroundings, NPC descriptions, mechanics).",
+                                 default=True)
 
-    valid: bool = Field(
-        description="True if the game action follows all rules. Fal1se if it violates world rules, uses unavailable \
-        items, contradicts established facts, or attempts impossible actions.",
-        default=True,
-    )
+    valid: bool = Field(description="True if the game action follows all rules. Fal1se if it violates world rules, uses unavailable \
+items, contradicts established facts, or attempts impossible actions.",
+                        default=True)
 
-    violation_details: str = Field(
-        description="Brief description of violations. Only populated when valid=False",
-        default="",
-    )
+    violation_details: str = Field(description="Brief description of violations. Only populated when valid=False",
+                                   default="")
 
-    action_types: List[str] = Field(
-        description=f"Types of game actions detected. Pick from {game_action_types.keys()}. \
-    MUST include at least one type if valid=True. Leave empty [] if the action is invalid (valid=False)",
-        default_factory=list,
-    )
+    action_types: List[str] = Field(description=f"Types of game actions detected. Pick from {game_action_types.keys()}. \
+MUST include at least one type",
+                                    default_factory=list)
 
 
 # ------------------------------- Inventory Changes -------------------------------
@@ -59,9 +51,9 @@ class InventoryItemChange(BaseModel):
     """Inventory update unit"""
 
     item: str = Field(validation_alias="name", description="Item name")
-    change_amount: int = Field(
-        validation_alias="amount", default=0, description="Number of items changed"
-    )
+    change_amount: int = Field(validation_alias="amount",
+                               default=0,
+                               description="Number of items changed")
     subject: str = Field(description="Who's inventory is changed?", default="")
     source: str = Field(description="Who provided this inventory item?", default="")
 
@@ -69,9 +61,7 @@ class InventoryItemChange(BaseModel):
 class InventoryUpdates(BaseModel):
     """All inventory updates"""
 
-    itemUpdates: List[InventoryItemChange] = Field(
-        default=[], description="List of inventory updates"
-    )
+    itemUpdates: List[InventoryItemChange] = Field(default=[], description="List of inventory updates")
 
 
 # ------------------------------- Player's state -------------------------------
@@ -84,9 +74,7 @@ class PhysicalCondition(BaseModel):
 
 
 class PlayerState(BaseModel):
-    physical: list[PhysicalCondition] = Field(
-        default=[], description="Physical condition"
-    )
+    physical: list[PhysicalCondition] = Field(default=[], description="Physical condition")
     mental: list[MentalCondition] = Field(default=[], description="Mental condition")
 
 
@@ -94,43 +82,40 @@ class PlayerState(BaseModel):
 class CurrentLocation(BaseModel):
     kingdom: str = Field(description="Current kingdom", default="")
     town: str = Field(description="Current town", default="")
-    extra: str = Field(
-        description="Fine-grained details of the current location", default=""
-    )
+    extra: str = Field(description="Fine-grained details of the current location", default="")
 
 
 class DestinationLocation(BaseModel):
     kingdom: str = Field(description="Destination kingdom", default="")
     town: str = Field(description="Destination town", default="")
-    extra: str = Field(
-        description="Fine-grained details of the destination location", default=""
-    )
+    extra: str = Field(description="Fine-grained details of the destination location", default="")
 
 
 class PlayerLocation(BaseModel):
-    current: CurrentLocation | None = Field(
-        description="Current location", default=None
-    )
-    destination: DestinationLocation | None = Field(
-        description="Destination", default=None
-    )
+    current: CurrentLocation | None = Field(description="Current location",
+                                            default=None)
+    destination: DestinationLocation | None = Field(description="Destination",
+                                                    default=None)
 
 
 # ------------------------------- NPC -------------------------------
+_npc_gateway_reason_len = 20
+class NPCGatewayResponse(BaseModel):
+    """Response model for NPC action gateway decision"""
+
+    should_act: bool = Field(description="True if NPC should respond/act, False otherwise")
+    reason: str = Field(description=f"Explain your decision in max {_npc_gateway_reason_len} words")
+
+
 class NPCResponseModel(BaseModel):
     """Response model for NPC action"""
 
-    action: str = Field(
-        description="Your action. Use 3-5 sentences for complex multi-step actions",
-        default="",
-    )
-    state: PlayerState | None = Field(
-        description="Determine player's state", default=None
-    )
-    location: PlayerLocation | None = Field(
-        description="Player's current location and possibly new destination",
-        default=None,
-    )
+    action: str = Field(description="Your action. Use 3-5 sentences for complex multi-step actions",
+                        default="")
+    state: PlayerState | None = Field(description="Determine player's state", default=None)
+
+    location: PlayerLocation | None = Field(description="Player's current location and possibly new destination",
+                                            default=None)
 
 
 # ------------------------------- Character Models -------------------------------

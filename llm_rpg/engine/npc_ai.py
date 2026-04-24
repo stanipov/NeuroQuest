@@ -11,9 +11,12 @@ import json
 from copy import copy as _copy
 from typing import List, Dict, Any
 from pydantic import BaseModel
-from llm_rpg.prompts.response_models import NPCResponseModel
-from llm_rpg.prompts.npc import gen_npc_base_system_prompt
+from llm_rpg.prompts.response_models import NPCResponseModel, NPCGatewayResponse
+from llm_rpg.prompts.npc import gen_npc_base_system_prompt, gen_npc_gateway_prompt
 from llm_rpg.templates.tool import BaseTool
+from llm_rpg.templates.base_client import BaseClient
+from llm_rpg.engine.memory import GameMemory
+from llm_rpg.utils.prompt_utils import generate_with_retry
 
 
 # ------------------------------ Helpers ------------------------------
@@ -24,7 +27,139 @@ def get_other_characters(lore: Dict[str, Any], your_name: str):
 
 
 # ------------------------------ NPC AI class ------------------------------
-class NPC(BaseTool):
+class NPCAgent(BaseTool):
+    def __init__(self,
+                 name: str,
+                 llm_client: BaseClient,
+                 lore: Dict[str, Any],
+                 config: Dict[str, Any],
+                 game_memory: GameMemory):
+
+        super().__init__(llm_client, NPCResponseModel)
+
+        self.my_name = name
+        self.my_card = _copy(lore["npc"][self.my_name])
+        for x in ("money", "inventory"):
+            _ = self.my_card.pop(x)
+
+        self.llm_client = llm_client
+        self.lore = _copy(lore)
+        self.config = config
+        self.memory = game_memory
+
+        self.human_player_name = self.lore["human_player"]["name"]
+        self.other_npc_names = get_other_characters(self.lore, self.my_name)
+
+        # Build kingdom/town reference string
+        self.known_locations = [f'Kingdom "{x}" --> Towns: {", ".join(list(lore["towns"][x].keys()))}'\
+                                    for x in lore.get("towns", {})]
+
+
+    def _format_history(self, history: list[dict]) -> str:
+        """
+        Format recent history for dynamic context.
+        
+        Args:
+            history: List of recent game turns from memory
+            
+        Returns:
+            Formatted history string for prompt context
+        """
+        if not history:
+            return "No recent history available."
+        
+        formatted = []
+        for turn in history:
+            turn_num = turn.get("turn", "?")
+            user_action = turn.get("user_input", "N/A")
+            game_state = turn.get("game_action", turn.get("displayed_action", "N/A"))
+            
+            # Include other NPC actions if present
+            npc_actions = []
+            for npc_name in self.other_npc_names:
+                sanitized = self.memory._inverse_npc_mapping.get(npc_name, npc_name)
+                if sanitized in turn and turn[sanitized]:
+                    npc_actions.append(f"{npc_name}: {turn[sanitized]}")
+            
+            entry = f"Turn {turn_num}:\n  Player: {user_action}\n  State: {game_state}"
+            if npc_actions:
+                entry += f"\n  {' | '.join(npc_actions)}"
+            formatted.append(entry)
+        
+        return "\n".join(formatted)
+
+
+    def _input_gateway(self, user_input: str) -> Dict[str, Any]:
+        """
+        Decide if the NPC should respond to user input.
+
+        Args:
+            user_input: Current user input
+
+        Returns:
+            Dict with 'should_act' (bool) and 'reason' (str)
+        """
+        # Fetch recent global history from memory
+        recent_history = self.memory.get_last_n_turns(n=self.config.get("gateway_history_depth"))
+        
+        # Format history for context
+        history_context = self._format_history(recent_history)
+        
+     # Build system prompt (static, character-specific)
+        system_prompt = gen_npc_gateway_prompt(npc_name=self.my_name,
+                                                npc_card=self.my_card,
+                                                other_npc_names=self.other_npc_names)
+        
+        # Build user prompt (dynamic, per-call)
+        user_prompt = f"""CURRENT INPUT: "{user_input}"
+
+RECENT CONTEXT:
+{history_context}
+
+Apply the checklist above. Is this input directed at you, or not?"""
+
+        fallback = NPCGatewayResponse(should_act=False, reason="Gateway failed")
+        result = generate_with_retry(client=self.llm_client,
+                                     messages=[{"role": "system", "content": system_prompt},
+                                               {"role": "user", "content": user_prompt}],
+                                     response_model=NPCGatewayResponse,
+                                     max_retries=self.config["max_generation_retries"],
+                                     fallback_value=fallback,
+                                     component_name=f"NPC Gateway: {self.my_name}",
+                                     temperature_cooldown_step=self.config["temperature_cooldown_step"],
+                                     temperature_min=self.config["temperature_min"],
+                                     temperature=self.config["gateway_temperature"])
+        return result["message"]
+
+        """
+        result = self.llm_client.struct_output(messages=[{"role": "system", "content": system_prompt},
+                                                        {"role": "user", "content": user_prompt}],
+                                                response_model=NPCGatewayResponse,
+                                                temperature=self.config["gateway_temperature"])
+        
+        
+        result = self.llm_client.chat(messages=[{"role": "system", "content": system_prompt},
+                                                {"role": "user", "content": user_prompt}],
+                                      temperature=self.config["gateway_temperature"])
+
+        return result["message"].model_dump()
+        """
+
+
+    def _build_system_prompt(self, *args) -> str:
+
+        return ""
+
+    def compile_messages(self, *args, **kwargs):
+        return None
+
+
+    def run(self, *arg, **kwargs):
+        return None
+
+
+# ------------------------------ DEPRECATED: NPC AI class ------------------------------
+class NPC_old(BaseTool):
     def __init__(
         self,
         llm_client,
