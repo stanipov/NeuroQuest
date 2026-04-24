@@ -41,10 +41,8 @@ class InputGateway(BaseTool):
         self.config = config
 
         # Build kingdom/town reference string
-        self.lore_kingdoms_towns = [
-            f'Kingdom "{x}" --> Towns: {", ".join(list(lore["towns"][x].keys()))}'
-            for x in lore.get("towns", {})
-        ]
+        self.lore_kingdoms_towns = [f'Kingdom "{x}" --> Towns: {", ".join(list(lore["towns"][x].keys()))}' \
+                                    for x in lore.get("towns", {})]
 
         # Build NPC name tracking
         self.known_npc_names = list(self.lore.get("npc", {}).keys())
@@ -89,7 +87,7 @@ False otherwise, with specific violations listed (max {self.config.get('max_viol
 - No action classification needed for invalid actions - just report the violation 
 
 ACTION TYPES EXPLANATION:
-{'-'.join([ f"- {x}\n" for key, x in  game_action_types.items()])}
+{'-'.join([ f"- **{x}**\n" for key, x in  game_action_types.items()])}
 
 OUTPUT RULES:
 - Be strict about validity but permissive about what constitutes a game action
@@ -284,17 +282,14 @@ NPCs present at current location: None
             history_parts = []
             for turn in turns:
                 game_action = turn.get("game_action", "")
-                displayed_action = turn.get("displayed_action", "")
                 user_input = turn.get("user_input", "")
 
-                if user_input or game_action or displayed_action:
+                if user_input or game_action:
                     entry = f"Turn {turn.get('turn', '?')}:"
                     if user_input:
                         entry += f" Player said: {user_input}"
                     if game_action:
                         entry += f" -> Action: {game_action}"
-                    if displayed_action:
-                        entry += f" | Game: {displayed_action}"
                     history_parts.append(entry)
 
             return "\\n\\n".join(history_parts)
@@ -314,7 +309,8 @@ NPCs present at current location: None
 
             if "current_location" in dynamic_ctx:
                 loc = dynamic_ctx["current_location"]
-                loc_str = f"Location: Town: {loc.get('town', 'Unknown')}, Kingdom: {loc.get('kingdom', 'Unknown')}, Details: {loc.get('details','')}"
+                loc_str = f"Location: Town: {loc.get('town', 'Unknown')}, \
+                Kingdom: {loc.get('kingdom', 'Unknown')}, Details: {loc.get('details','')}"
 
                 user_msg_parts.append(loc_str)
 
@@ -328,7 +324,8 @@ NPCs present at current location: None
                 loc_parts = []
                 for char_name, loc_data in dynamic_ctx["character_locations"].items():
                     if loc_data.get("town") or loc_data.get("kingdom"):
-                        location_str = f"Town: {loc_data.get('town', 'Unknown')}, Kingdom: {loc_data.get('kingdom', 'Unknown Kingdom')}, Details: {loc_data.get('details', '')}"
+                        location_str = f"Town: {loc_data.get('town', 'Unknown')}, Kingdom: \
+{loc_data.get('kingdom', 'Unknown Kingdom')}, Details: {loc_data.get('details', '')}"
                         loc_parts.append(f"{char_name}: {location_str}")
                 user_msg_parts.append(f"Character locations: {' | '.join(loc_parts)}")
 
