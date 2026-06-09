@@ -11,8 +11,6 @@ from llm_rpg.utils.config_loader import load_config
 from llm_rpg.engine.io import IO
 from llm_rpg.gui.console_manager import ConsoleManager
 from llm_rpg.gui.game_menu import GameMenu
-from llm_rpg.gui.chat import RPGChatInterface
-from llm_rpg.utils.mock_functions import user_input_process_mock, ai_response_mock
 
 from llm_rpg.app.lore_generator import GenerateLore
 from llm_rpg.engine.memory import GameMemory
@@ -21,7 +19,7 @@ from llm_rpg.utils.config import setup_llms, get_lore_generation_params
 from llm_rpg.utils.logger import set_logger
 
 
-from llm_rpg.engine.game_ai import GameAI
+#from llm_rpg.engine.game_ai import GameAI
 
 # ----- Some testing flags -----
 TEST_MAIN_MENU = True
@@ -159,14 +157,14 @@ if __name__ == "__main__":
         console_manager.display_all_lore(game_lore_raw)
 
         # set up GameAI
-        game_ai = GameAI(
-            lore=game_lore_raw,
-            llm_registry=llm_clients,
-            memory=memory,
-            config=config["game"],
-            **llms_kwargs,
-        )
-
+        #game_ai = GameAI(
+        #    lore=game_lore_raw,
+        #    llm_registry=llm_clients,
+        #    memory=memory,
+        #    config=config["game"],
+        #    **llms_kwargs,
+        #)
+"""
     if TEST_GAME_AI:
         logger.info(f"Loading the game")
         _row = game_io.games.iloc[row_num - 1]
@@ -186,8 +184,7 @@ if __name__ == "__main__":
             llm_registry=llm_clients,
             memory=memory,
             config=config["game"],
-            **llms_kwargs,
-        )
+            **llms_kwargs,)
 
         # Display all lore information
         console_manager.display_all_lore(game_lore_raw)
@@ -215,28 +212,6 @@ if __name__ == "__main__":
                 for char in game_ai.generate_game_action():
                     console_manager.console.print(char, end="\r")
 
-    if TEST_CHAT1:
-        # TODO: Continue with chat interface setup...
-        chat_interface = RPGChatInterface(console_manager)
-        chat_interface.register_command_hooks(
-            stack="user_input", handler=user_input_process_mock, command="process_input"
-        )
 
-        chat_interface.register_command_hooks(
-            stack="user_input", handler=ai_response_mock, command="ai_response"
-        )
+"""
 
-        chat_interface.register_command_hooks(
-            stack="post_processing", handler=lambda x: x, command="exit"
-        )
-
-        # chat_interface.user_input_process_mock = custom_input_processor
-        # chat_interface.generate_response = custom_response_generator
-
-        chat_interface.start()
-
-        # console_manager.console.clear()
-
-    # if TEST_CHAT2:
-    #    chat_interface = ChatInterface2(console_manager)
-    #    chat_interface.set_game_ai(game_ai)

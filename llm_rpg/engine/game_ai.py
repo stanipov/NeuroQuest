@@ -1,12 +1,13 @@
-from typing import List, Dict, Any, Generator
+from typing import List, Dict, Any, Generator, Optional
 from random import shuffle
 from llm_rpg.templates.tool import BaseTool
 from llm_rpg.templates.base_client import BaseClient
 from llm_rpg.engine.memory import GameMemory
 from llm_rpg.engine.npc_ai import NPC
-from llm_rpg.engine.tools import InputValidator
+from llm_rpg.engine.gateways import InputGateway
+from llm_rpg.engine.action_classifier import ActionClassifier
 from llm_rpg.gui.chat import HookResponse, InputProcessingStatus
-from llm_rpg.prompts.response_models import ValidateClassifyAction
+from llm_rpg.prompts.response_models import GatewayResponse
 
 from copy import copy as _cp
 import logging
@@ -35,7 +36,7 @@ class GameAI:
             list(self.lore["npc"].keys()) if len(self.lore["npc"].keys()) > 0 else None
         )
         self.__npc_queue = self.__gen_npc_queue()
-        self.__verified_input = ValidateClassifyAction()
+        self.__verified_input = GatewayResponse()
 
         self.npc_ai = {}
         self.input_validator = None
@@ -79,13 +80,13 @@ class GameAI:
 
     def __init_input_validator(self):
         if self.llm_registry["input_validator"] is not None:
-            self.input_validator = InputValidator(
+            self.input_validator = InputGateway(
                 self.lore, self.llm_registry["input_validator"]
             )
         else:
             self.input_validator = None
 
-    def verify_user_input(self, message: str) -> ValidateClassifyAction | None:
+    def verify_user_input(self, message: str) -> GatewayResponse | None:
         if self.input_validator is not None:
             user_inventory = self.memory.list_inventory_items("human")
             last_turn_rows = self.memory.get_last_n_rows(
@@ -108,7 +109,7 @@ class GameAI:
             logger.debug(
                 f"Input validator is not available, assuming the input was a game action"
             )
-            return ValidateClassifyAction()
+            return GatewayResponse()
 
     def generate_non_game_response(self) -> str:
         return "Non Game Action"
@@ -121,7 +122,9 @@ class GameAI:
         for _ in range(20):
             yield random.choice(string.ascii_letters + string.digits + " .,;:!?")
 
-    def process_user_input(self, message: str) -> Generator[HookResponse, None, None]:
+    def deprecate_process_user_input(self, message: str) -> Generator[HookResponse, None, None]:
+        # TODO: re-do. This is not coped for deprecation
+
         """Process user input and yield NPC responses one at a time.
 
         Yields HookResponse objects for each NPC in the queue. The last response

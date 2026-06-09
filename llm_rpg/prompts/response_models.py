@@ -112,10 +112,11 @@ class NPCResponseModel(BaseModel):
 
     action: str = Field(description="Your action. Use 3-5 sentences for complex multi-step actions",
                         default="")
-    state: PlayerState | None = Field(description="Determine player's state", default=None)
-
-    location: PlayerLocation | None = Field(description="Player's current location and possibly new destination",
-                                            default=None)
+    mental_state: str = Field(description="Mental condition, 1 word", default="")
+    # state: PlayerState | None = Field(description="Determine player's state", default=None)
+    #
+    # location: PlayerLocation | None = Field(description="Player's current location and possibly new destination",
+    #                                         default=None)
 
 
 # ------------------------------- Character Models -------------------------------

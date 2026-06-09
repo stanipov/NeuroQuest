@@ -318,6 +318,7 @@ class GameMemory:
         self._insert_initial_game_history(game_lore)
         self._insert_initial_locations(game_lore)
         self._insert_initial_inventories(game_lore)
+        self._insert_initial_states(game_lore)
         logger.info("Initial data population complete")
 
     def _insert_initial_game_history(self, game_lore: Dict[str, Any]) -> None:
@@ -427,6 +428,38 @@ class GameMemory:
             conn.commit()
 
         logger.info("Inserted initial inventory data")
+
+    def _insert_initial_states(self, game_lore: Dict[str, Any]) -> None:
+        """Insert initial state rows (turn 0) for human player and NPCs.
+
+        Args:
+            game_lore: Game lore dictionary with 'human_player' and 'npc' keys
+        """
+        with self.engine.connect() as conn:
+            # Human player
+            hp = game_lore.get("human_player", {})
+            if hp:
+                conn.execute(
+                    text("""INSERT INTO state (turn, name, physical, mental)
+                            VALUES (0, 'user', :physical, :mental)"""),
+                    {"physical": hp.get("physical", ""), "mental": hp.get("mental", "")},
+                )
+
+            # NPCs
+            for npc_name, npc_info in game_lore.get("npc", {}).items():
+                conn.execute(
+                    text("""INSERT INTO state (turn, name, physical, mental)
+                            VALUES (0, :name, :physical, :mental)"""),
+                    {
+                        "name": npc_name,
+                        "physical": npc_info.get("physical", ""),
+                        "mental": npc_info.get("mental", ""),
+                    },
+                )
+
+            conn.commit()
+
+        logger.info("Inserted initial state data")
 
     def _load_npc_mapping(self) -> None:
         """Load NPC name mapping from existing database"""
@@ -638,3 +671,71 @@ class GameMemory:
                     "details": row[3] or "",
                 }
             return None
+
+    def get_latest_state(self, character: str) -> Optional[Dict[str, Any]]:
+        """Get the most recent state row for a character.
+
+        Args:
+            character: Character name ('user' or NPC name)
+
+        Returns:
+            Dict with keys 'physical', 'mental'. None if no state found.
+        """
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                text("""SELECT physical, mental FROM state
+                        WHERE name = :character
+                        ORDER BY turn DESC LIMIT 1"""),
+                {"character": character},
+            )
+            row = result.first()
+            if row:
+                return {"physical": row[0] or "", "mental": row[1] or ""}
+            return None
+
+    def update_character_state(
+        self, character: str, physical: str = None, mental: str = None
+    ) -> None:
+        """Update the character's state at the current turn.
+
+        Inserts a new row at the latest turn from game_history, or updates
+        if a row already exists for that turn. Partial updates are supported:
+        passing only `mental` preserves the existing `physical`, and vice versa.
+
+        Args:
+            character: Character name ('user' or NPC name)
+            physical: New physical state string (optional)
+            mental: New mental state string (optional)
+        """
+        if physical is None and mental is None:
+            return
+
+        with self.engine.connect() as conn:
+            # Current turn from game_history
+            result = conn.execute(text("SELECT MAX(turn) FROM game_history"))
+            current_turn = result.scalar() or 0
+
+            # Fetch previous state to preserve unchanged fields
+            prev = conn.execute(
+                text("""SELECT physical, mental FROM state
+                        WHERE name = :name ORDER BY turn DESC LIMIT 1"""),
+                {"name": character},
+            ).first()
+
+            new_physical = physical if physical is not None else (prev[0] if prev else "")
+            new_mental = mental if mental is not None else (prev[1] if prev else "")
+
+            conn.execute(
+                text("""INSERT INTO state (turn, name, physical, mental)
+                        VALUES (:turn, :name, :physical, :mental)
+                        ON CONFLICT(turn, name) DO UPDATE SET
+                            physical = excluded.physical,
+                            mental = excluded.mental"""),
+                {
+                    "turn": current_turn,
+                    "name": character,
+                    "physical": new_physical,
+                    "mental": new_mental,
+                },
+            )
+            conn.commit()

@@ -12,7 +12,7 @@ from copy import copy as _copy
 from typing import List, Dict, Any
 from pydantic import BaseModel
 from llm_rpg.prompts.response_models import NPCResponseModel, NPCGatewayResponse
-from llm_rpg.prompts.npc import gen_npc_base_system_prompt, gen_npc_gateway_prompt
+from llm_rpg.prompts.npc import gen_npc_base_system_prompt, gen_npc_gateway_prompt, gen_npc_system_prompt
 from llm_rpg.templates.tool import BaseTool
 from llm_rpg.templates.base_client import BaseClient
 from llm_rpg.engine.memory import GameMemory
@@ -131,31 +131,100 @@ Apply the checklist above. Is this input directed at you, or not?"""
                                      temperature=self.config["gateway_temperature"])
         return result["message"]
 
-        """
-        result = self.llm_client.struct_output(messages=[{"role": "system", "content": system_prompt},
-                                                        {"role": "user", "content": user_prompt}],
-                                                response_model=NPCGatewayResponse,
-                                                temperature=self.config["gateway_temperature"])
-        
-        
-        result = self.llm_client.chat(messages=[{"role": "system", "content": system_prompt},
-                                                {"role": "user", "content": user_prompt}],
-                                      temperature=self.config["gateway_temperature"])
-
-        return result["message"].model_dump()
-        """
-
 
     def _build_system_prompt(self, *args) -> str:
+        state = self.memory.get_latest_state(self.my_name) or {}
+        return gen_npc_system_prompt(
+            npc_name=self.my_name,
+            npc_card=self.my_card,
+            npc_rules=self.lore.get("npc_rules", {}).get(self.my_name, {}),
+            world_name=self.lore["world"]["name"],
+            world_description=self.lore["world"]["description"],
+            world_outline=self.lore.get("world_outline", {}),
+            known_locations=self.known_locations,
+            human_player_name=self.human_player_name,
+            physical_state=state.get("physical", ""),
+            mental_state=state.get("mental", ""),
+        )
 
-        return ""
+    def compile_messages(self,
+                         user_input: str,
+                         react_reason: str="") -> List[Dict[str, str]]:
+        sys_prt = self._build_system_prompt()
+        history = self.memory.get_last_n_turns(self.config.get("npc_chat_history"))
 
-    def compile_messages(self, *args, **kwargs):
-        return None
+        # Build history context (most recent first)
+        history_lines = []
+        for turn in history:
+            turn_num = turn.get("turn", "?")
+            player_action = turn.get("user_input", "N/A") or "N/A"
+            game_response = turn.get("displayed_action", turn.get("game_action", "")) or ""
+
+            entry = f"Turn {turn_num}:\n  Player: {player_action}"
+            if game_response:
+                entry += f"\n  Game: {game_response}"
+
+            # Other NPC actions
+            for npc_name in self.other_npc_names:
+                sanitized = self.memory._inverse_npc_mapping.get(npc_name, npc_name)
+                npc_action = turn.get(sanitized)
+                if npc_action:
+                    entry += f"\n  {npc_name}: {npc_action}"
+
+            # This NPC's own past action
+            my_sanitized = self.memory._inverse_npc_mapping.get(self.my_name, self.my_name)
+            my_action = turn.get(my_sanitized)
+            if my_action:
+                entry += f"\n  You: {my_action}"
+
+            history_lines.append(entry)
+
+        history_context = "\n".join(history_lines) if history_lines else "No recent history."
+
+        user_prompt = f"""You are {self.my_name}. Stay in character at all times.
+
+RECENT HISTORY:
+{history_context}
+
+CURRENT INPUT: "{user_input}"
+Reason to act: {react_reason}
+
+As {self.my_name}, decide what to do. Respond with your action, and optionally update your state and location.
+
+POST-ACTION REFLECTION:
+After deciding your action, consider how the events and your actions have shaped your mental state.
+Update your mental state to reflect this."""
+
+        return [
+            {"role": "system", "content": sys_prt},
+            {"role": "user", "content": user_prompt},
+        ]
 
 
-    def run(self, *arg, **kwargs):
-        return None
+    def run(self, user_input: str, **kwargs) -> Dict[str, str]:
+
+        # gateway definition
+        gateway_result = self._input_gateway(user_input)
+        should_act = gateway_result["should_act"]
+        should_act_reason = gateway_result["reason"]
+        response = {}
+
+        if should_act:
+            messages = self.compile_messages(user_input, should_act_reason)
+            response = generate_with_retry(client=self.llm_client,
+                                           messages=messages,
+                                           response_model=NPCResponseModel,
+                                           max_retries=self.config["max_generation_retries"],
+                                           fallback_value=None,
+                                           component_name=f"NPC response: {self.my_name}",
+                                           temperature_cooldown_step=self.config["temperature_cooldown_step"],
+                                           temperature_min=self.config["temperature_min"],
+                                           temperature=self.config["temperature"],
+                                           **kwargs)
+            response["reason"] = should_act_reason
+            # ToDo: based on the response, we shall update mental state of the NPC
+
+        return response
 
 
 # ------------------------------ DEPRECATED: NPC AI class ------------------------------
