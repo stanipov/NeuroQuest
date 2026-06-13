@@ -1,0 +1,14 @@
+# baml.yaml in project root
+version: 1
+generators:
+  - name: baml_client
+    version: 0.1.0
+    output: ./baml_client
+    language: python  # or typescript, ruby, etc.
+    watch_patterns:
+      - "src/**/*.baml"
+      - "*.baml"
+    exclude_patterns:
+      - "**/tests/*.baml"           # Matches src/baml_src/tests/*.baml
+      - "**/test_*.baml"             # Matches any file starting with test_
+      - "**/*.test.baml"             # For consistency with other naming conventions

@@ -1,23 +1,13 @@
 # Local data not to be commited
-course/
-notebooks/
-data_ignore/
-lore/
-.tmp/
-usefull_links
-tests_old/
-test_folder/
-test_*/
-game/
+deprecated_v1/
 configs/
-
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-gradio_cached_examples/
 ignore/
+*/baml_client/
 
 # JuPyter notebooks
 *.ipynb
