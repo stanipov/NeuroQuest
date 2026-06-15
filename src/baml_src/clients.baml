@@ -7,7 +7,7 @@ client<llm> LoreLLM {
     base_url http://127.0.0.1:9000/v1
     api_key "dummy-key"
     model "Gemma4-26B-A4B"
-    temperature 1.0
+    temperature 1.5
     // response_validation "relaxed"
   }
 }

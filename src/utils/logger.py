@@ -1,42 +1,28 @@
-import logging
-from sys import stdout, stderr
+import sys
+from loguru import logger
 
 
-def set_logger(level=logging.INFO,
-               fmt: str="[%(asctime)s] [%(name)-16s] [%(levelname)-8s] %(message)s",
-               output: str = "stdout") -> logging.Logger:
-    """ Sets up a stdout logger """
+def setup_logging(
+    console_level: str = "INFO",
+    file_level: str = "DEBUG",
+    file_path: str = "logs/neuroquest.log",
+    console_enabled: bool = True,
+    file_enabled: bool = True,
+) -> None:
+    logger.remove()
 
-    if output not in {"stdout", "stderr"} and not isinstance(output, str):
-        raise ValueError("Invalid output parameter. Must be 'stdout', 'stderr', or a valid file path.")
+    if console_enabled:
+        logger.add(
+            sys.stderr,
+            level=console_level.upper(),
+            format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+            colorize=True,
+        )
 
-    logFormatter = logging.Formatter(
-        fmt=fmt,
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-
-    logger = logging.getLogger()
-    logger.setLevel(level)
-
-    # Ensure the logger does not propagate to the root logger
-    logger.propagate = False
-
-    # Remove any existing handlers to prevent duplicates in Jupyter
-    if logger.hasHandlers():
-        logger.handlers.clear()
-
-    # Create a StreamHandler that prints to sys.stdout (needed for Jupyter)
-    if output == "stdout":
-        handler = logging.StreamHandler(stdout)
-    elif output == "stderr":
-        handler = logging.StreamHandler(stderr)
-    else:
-        handler = logging.FileHandler(output, mode='a')
-
-    handler.setLevel(level)
-    handler.setFormatter(logFormatter)
-
-    # Add the handler to the logger
-    logger.addHandler(handler)
-
-    return logger
+    if file_enabled:
+        logger.add(
+            file_path,
+            level=file_level.upper(),
+            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+            colorize=False,
+        )

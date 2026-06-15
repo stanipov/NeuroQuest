@@ -15,7 +15,7 @@ class WorldRules {
 class WorldNarrative {
     name string @description("Name of the world")
     history string @description("Brief world history from ancient to now; maximum 10 sentences")
-    description string @description("Convert the world rules into a compelling narrative, maximum 10 sentences")
+    current_state string @description("Current state of the world, logically flowing from its history; maximum 10 sentences")
 
 }
 
@@ -59,6 +59,7 @@ template_string CoreLoreRules() #"
 // Lore generation
 
 function NarrateWorld(rules: WorldRules) -> WorldNarrative {
+    // Narrate the world rules into its history and a poetic description
     client LoreLLM
     prompt #"
     {{ _.role("system") }}
@@ -66,12 +67,22 @@ function NarrateWorld(rules: WorldRules) -> WorldNarrative {
 
     ## Instructions:
     You are given structured world rules covering {{ WorldRules }}.
-    Write a compelling and logically coherent world narrative that brings those rules to life.
+    Write a world narrative with two complementary parts.
 
-    - Every rule category must be reflected somewhere in the narrative
-    - Show how the rules interact, conflict, or reinforce each other
-    - Use sensory details (scents, textures, lighting, sounds) — no abstract adjectives
-    - The world must feel lived-in, not like a textbook entry
+    ### `history` — The World's Chronicle (max 10 sentences)
+    - A sweeping, cause-and-effect timeline from ancient origins to the present day
+    - Focus on eras, turning points, discoveries, catastrophes, rises and falls of civilizations
+    - Every rule category must appear somewhere in the history, shaping events
+    - No individual characters — this is the story of the world itself
+    - Use phrases like "This led to...", "In response...", "Over centuries..."
+
+    ### `current_state` — The World as It Is Now (max 10 sentences)
+    - A broad survey of the present-day world, logically flowing from the history above
+    - For each present-day observation, trace it back to a historical cause
+    - Cover multiple domains: current power structures, daily life across social strata, active conflicts, how different regions and factions fare under the current order
+    - No single character's experience — this is the world's status report
+    - Use sensory details (scents, textures, lighting, sounds) to ground each observation
+    - The world must feel like it has a past that actively shapes the present — scars, traditions, grudges, ruins, laws, resource shortages
 
     {{ _.role("user") }}
     Generate a world narrative from these rules:
@@ -123,10 +134,14 @@ function GenPlayerCard(type: WorldTypes, rules: WorldRules, narrative: WorldNarr
     {{ CoreLoreRules() }}
 
     ## Instructions:
-    - Create a character shaped by the given world — their occupation, possessions, and backstory must reflect the world's magic, technology, society, and geography
+    - Create a character shaped by the given WorldRules — every aspect of them should feel native to this world
+    - The character must have a clear personal motivation that drives them into adventure (a mystery to solve, a person to find, a debt to repay, a calling they can't ignore)
     - Strengths and weaknesses must be concrete and tied to the character's background (not generic)
+    - The weakness should create interesting narrative dilemmas (loyalty conflict, dangerous curiosity, a code they won't break) — not just a mechanical deficit
+    - The biography should contain 1-2 loose ends a Game Master could pull on (unresolved relationships, secrets, unanswered questions about the past)
+    - The character must have a personal stake in at least one of the world's inherent conflicts
     - Physical and wisdom descriptions must be grounded in the world's rules
-    - Avoid cliché names and tropes
+    - Avoid cliché names (e.g. Elara, Thorne, Krell, Kaelen, etc.) and tropes
     - Follow the output schema exactly — every field must be populated meaningfully
 
     {{ _.role("user") }}
@@ -140,6 +155,47 @@ function GenPlayerCard(type: WorldTypes, rules: WorldRules, narrative: WorldNarr
     {{ narrative }}
 
     Generate a player character card for someone who lives in this world.
+    {{ ctx.output_format }}
+    "#
+}
+
+
+function GenNPCCard(type: WorldTypes, rules: WorldRules, narrative: WorldNarrative, player: PlayerCharacterCard) -> PlayerCharacterCard {
+    // Generates NPC card
+    client LoreLLM
+    prompt #"
+    {{ _.role("system") }}
+    You are a talented character creator for a textual RPG game. You create compelling, believable characters that feel native to their world.
+
+    You write in strict accordance with these principles:
+    {{ CoreLoreRules() }}
+
+    ## Instructions:
+    - Create an NPC companion shaped by the given WorldRules — every aspect of them should feel native to this world
+    - The NPC has their own personality, goals, and motivations — independent from the player character
+    - The NPC can compliment, challenge, or even conflict with the player — they are not a sycophant or hanger-on
+    - Their strengths and weaknesses should complement the player's, creating interesting party dynamics
+    - Their backstory should naturally explain why they travel with the player (shared goal, debt, coincidence, etc.)
+    - Strengths and weaknesses must be concrete and tied to the character's background (not generic)
+    - Physical and wisdom descriptions must be grounded in the world's rules
+    - Avoid cliché names and tropes
+    - Follow the output schema exactly — every field must be populated meaningfully
+    - Avoid cliche names such as Elara, Thorne, Krell, Kaelen,etc.
+
+    {{ _.role("user") }}
+    World type: {{ type.type }}
+    Inspiration: {{ type.inspiration }}
+
+    World rules:
+    {{ rules }}
+
+    World narrative:
+    {{ narrative }}
+
+    Player character:
+    {{ player }}
+
+    Generate an NPC companion who travels with this player.
     {{ ctx.output_format }}
     "#
 }

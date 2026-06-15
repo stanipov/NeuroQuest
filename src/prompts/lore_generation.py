@@ -2,19 +2,13 @@
 Collection of prompts to generate the world and the lore
 """
 
-from .response_models import (
-    WorldRulesModel,
-    NPCBehaviorRulesModel,
-    KingdomsModel,
-    KingdomData,
-)
-from ..utils.helpers import dict_2_str
+from src.utils.deprecate.helpers import dict_2_str
 import logging
 import random
 
 logger = logging.getLogger(__name__)
 
-from typing import Dict, List, Set, Any, Optional
+from typing import Dict, List, Any, Optional
 
 
 ########################################################################################################################
