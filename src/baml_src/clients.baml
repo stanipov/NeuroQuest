@@ -1,6 +1,34 @@
 // Learn more about clients at https://docs.boundaryml.com/docs/snippets/clients/overview
 
-client<llm> LoreLLM {
+
+client<llm> GenericLoreLLM {
+  provider openai-generic
+  retry_policy Constant
+  options {
+    base_url http://127.0.0.1:9000/v1
+    api_key "dummy-key"
+    model "Gemma4-26B-A4B Uncensored"
+    //"Gemma4-26B-A4B"
+    temperature 1.0
+    // response_validation "relaxed"
+  }
+}
+
+client<llm> NarrateWorldLLM {
+  provider openai-generic
+  retry_policy Constant
+  options {
+    base_url http://127.0.0.1:9000/v1
+    api_key "dummy-key"
+    model "Gemma4-26B-A4B Uncensored"
+    //"Gemma4-26B-A4B"
+    temperature 0.5
+    // response_validation "relaxed"
+  }
+}
+
+
+client<llm> WorldConceptLLM {
   provider openai-generic
   retry_policy Constant
   options {
@@ -12,6 +40,21 @@ client<llm> LoreLLM {
     // response_validation "relaxed"
   }
 }
+
+
+client<llm> LoreLLMCritique {
+  provider openai-generic
+  retry_policy Constant
+  options {
+    base_url http://127.0.0.1:9000/v1
+    api_key "dummy-key"
+    model "Gemma4-26B-A4B Uncensored"
+    //"Gemma4-26B-A4B"
+    temperature 0.5
+    // response_validation "relaxed"
+  }
+}
+
 
 
 // https://docs.boundaryml.com/docs/snippets/clients/retry

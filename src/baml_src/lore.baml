@@ -4,7 +4,8 @@ class WorldTypes {
     inspiration string @description("Inspiration for the world rules")
 }
 
-class WorldRules {
+
+class WorldConcept {
     magic string[]? @description("Optional. How magic works: sources, costs, limitations. Leave empty [] if the setting has no magic (e.g. sci-fi, realistic). 1 sentence for each rule.")
     physics string[] @description("Natural laws and how the physical world operates. 1 sentence for each rule.")
     society string[] @description("Social structures: governance, culture, norms, class systems, trade. 1 sentence for each rule.")
@@ -12,12 +13,34 @@ class WorldRules {
     technology string[] @description("Technology level and innovations: crafting, transportation, communication, tools. 1 sentence for each rule.")
 }
 
+
 class WorldNarrative {
     name string @description("Name of the world, derived from its defining characteristics in the rules")
     history string @description("Brief world history from ancient to now; maximum 10 sentences")
     current_state string @description("Current state of the world, logically flowing from its history; maximum 10 sentences")
 
 }
+
+
+class WorldConceptInconsistency {
+    world_concept string @description("Concept that is inconsistent or logically incorrect")
+    inconsistency string @description("1-2 short sentences (10 words each max) about concept inconsistency")
+    fix string @description("1 sentence, 10 words max: how to fix")
+}
+
+
+class WorldConceptCritiqueResult {
+    is_satisfied bool
+    //feedback string @description("Actionable feedback the writer can use to fix each issue. Max 2 sentences, be brief")
+    feedback WorldConceptInconsistency[] @description("Actionable feedback the writer can use to fix each issue")
+}
+
+
+class WorldConceptGenHistory {
+    draft WorldConcept @description("World Concept")
+    critique WorldConceptCritiqueResult
+}
+
 
 // =====================================================================================================================
 // Character cards
@@ -100,7 +123,6 @@ template_string GenresDescription() #"
 "#
 
 
-
 template_string CoreLoreRules() #"
 {{CoreWritingLoreRules() }}
 
@@ -133,11 +155,134 @@ template_string CoreLoreRules() #"
 {{ GenresDescription() }}
 "#
 
+
+template_string LogicalCoherenceLore() #"
+    ## Logical coherence
+    Apply the Causal Chain Requirement from {{ CoreWritingLoreRules() }}. Use formal logic.
+
+    Additional instructions:
+    ### Cross-category consistency checklist
+    Every rule you write in ANY category must pass:
+    1. **CAUSE**: Which root cause (physics, cosmology, or magic) enables or constrains this?
+    2. **EFFECT**: What downstream effect does this have on other categories?
+    3. **PLAUSIBILITY**: Can life/society/technology actually function under the conditions set by other rules?
+    4. **NO FREE-FLOATING RULES**: Every derived rule must reference a root cause. Every root cause must affect at least one derived category.
+
+    ### The causal chain
+    Root causes (physics, cosmology, magic) enable or constrain everything else.
+    - Geography & climate follow from the world's physical laws.
+    - Society & culture adapt to geography and operate within root-cause constraints.
+    - Technology solves problems created by geography/physics or exploits a root property.
+    - No category generates rules in isolation.
+
+    ### Causal completeness (applies to ALL categories)
+    Every rule must contain a complete causal statement — "X happens because Y."
+    A rule that states only an outcome without the mechanism or condition that produces it is incomplete.
+    ❌ "Polar areas are subject to long nights."
+    ✅ "Polar areas are subject to long nights because of the planet's tilt."
+"#
+
 // Lore generation
 
-function NarrateWorld(world_type:WorldTypes, concept: WorldRules) -> WorldNarrative {
+function GenWorldConcept(type: WorldTypes, history: WorldConceptGenHistory[]?) -> WorldConcept {
+    client WorldConceptLLM
+    prompt #"
+    {{ _.role("system") }}
+    You are talented story writer. You create concepts of captivating and logically coherent fictional worlds.
+
+    You write in the strict accordance with these principles.
+    {{ CoreLoreRules() }}
+
+    ## Instructions:
+    - Describe fundamental world mechanics — root causes that govern reality (physics, cosmology, and optionally magic).
+    - Describe how these mechanics interact with each other in a consistent and logical way.
+    - Invent geography and climate of the world; they must be coherent with the core world mechanics and affect them.
+    - Invent species which inhabit the world and describe how they interact with each other.
+    - For each topic provide 4-8 concepts.
+
+    ## Magic rules
+    - If the setting involves magic (fantasy, dark fantasy, elemental, etc.), generate 4-8 magic rules explaining how it works, its costs, and its limitations.
+    - If the setting is sci-fi, realistic, or non-magical, output an empty list [] for magic.
+    - Place more focus on magic if the setting involves magic than on physics
+
+    {{ LogicalCoherenceLore() }}
+
+    ### Specifically avoid
+    - Cliche names, such as Ichor
+    - Dim sun, eternal twilight, eternal fog, black sun
+    - Unexplained atmospheric/lighting conditions (twilight, fog, colored skies) without a root cause
+    - Societies or technologies that contradict the stated environment without an adaptation explanation
+    - "Rule of cool" details that exist in isolation with no causal link to other categories
+    - Multiple independent weird phenomena that don't interact or share a common origin
+    - Technology appearing in a world whose other rules wouldn't support it
+    - Species (elves, dwarves, aliens) in settings where their biology/evolution would make no sense
+
+    {{ _.role("user") }}
+    {% if history  %}
+    Your previous concepts along with actionable feedback from a critic:
+    {{ history }}
+    Revise the concept to address ALL feedback points. Preserve what works, fix what doesn't.
+    {% else %}
+    Create a concept for a {{ type.type }} world type. Draw your inspiration from {{ type.inspiration }}
+    {% endif %}
+
+    {{ ctx.output_format }}
+  "#
+
+}
+
+
+function WorldConceptCritique(type: WorldTypes, concept: WorldConcept, history: WorldConceptGenHistory[]?) -> WorldConceptCritiqueResult {
+    client LoreLLMCritique
+    prompt #"
+    {{ _.role("system") }}
+    You are a meticulous worldbuilding critic.
+
+    # Task
+    Analyze the given world concept for:
+    1. **Inconsistencies** — rules within a category that contradict each other
+    2. **Contradictions** — rules across different categories that conflict
+    3. **Deviations from genre** — elements that don't belong in the requested genre
+    4. **Causal Chain violations** — derived rules without root causes, or root causes with no downstream effects
+    5. **Missing rules** — categories that should logically exist given other rules but are absent
+    6. **Causally incomplete rules** — rules in any category that state an outcome without the mechanism or condition that produces it
+
+    # Instructions
+    {{ LogicalCoherenceLore() }}
+
+    ## Actions. Adhere strictly to formal logic:
+    - Identify inconsistencies
+    - For each inconsistency identify reasons or reason
+    - For each identifies inconsistency provide a fix
+
+    Your world will have most of these concepts:
+    {{ WorldConcept }}
+
+    The concept was written following these Core Concept Rules:
+    {{ CoreLoreRules() }}
+
+    {{ _.role("user") }}
+    World type: {{ type.type }}
+    Inspiration: {{ type.inspiration }}
+    World rules: {{ concept }}
+
+    {% if history  %}
+    Previous concepts along with actionable feedback:
+    {{ history }}
+    Verify that your feedback was fixed. If not, add to your output.
+    {% endif %}
+
+    Evaluate the concept. If it fully satisfies all coherence requirements — set `is_satisfied` to true and `feedback` to an empty string.
+    If issues exist — set `is_satisfied` to false and provide specific, actionable feedback in `feedback` that the writer can use to fix each issue.
+
+    {{ ctx.output_format }}
+    "#
+}
+
+
+function NarrateWorld(world_type:WorldTypes, concept: WorldConcept) -> WorldNarrative {
     // Narrate the world rules into its history and a poetic description
-    client LoreLLM
+    client NarrateWorldLLM
     prompt #"
     {{ _.role("system") }}
     {{ CoreWritingLoreRules() }}
@@ -182,64 +327,10 @@ function NarrateWorld(world_type:WorldTypes, concept: WorldRules) -> WorldNarrat
 }
 
 
-function GenWorldRules(type: WorldTypes) -> WorldRules {
-    client LoreLLM
-    prompt #"
-    {{ _.role("system") }}
-    You are talented story writer. You create concepts of captivating and logically coherent fictional worlds.
 
-    You write in the strict accordance with these principles.
-    {{ CoreLoreRules() }}
 
-    ## Instructions:
-    - Describe fundamental world mechanics — root causes that govern reality (physics, cosmology, and optionally magic).
-    - Describe how these mechanics interact with each other in a consistent and logical way.
-    - Invent geography and climate of the world; they must be coherent with the core world mechanics and affect them.
-    - Invent species which inhabit the world and describe how they interact with each other.
-    - For each topic provide 4-8 concepts.
-
-    ## Magic rules
-    - If the setting involves magic (fantasy, dark fantasy, elemental, etc.), generate 4-8 magic rules explaining how it works, its costs, and its limitations.
-    - If the setting is sci-fi, realistic, or non-magical, output an empty list [] for magic.
-    - Place more focus on magic if the setting involves magic than on physics
-
-    ## Logical coherence
-    Apply the Causal Chain Requirement from CoreWritingLoreRules. Additionally:
-
-    ### Cross-category consistency checklist
-    Every rule you write in ANY category must pass:
-    1. **CAUSE**: Which root cause (physics, cosmology, or magic) enables or constrains this?
-    2. **EFFECT**: What downstream effect does this have on other categories?
-    3. **PLAUSIBILITY**: Can life/society/technology actually function under the conditions set by other rules?
-    4. **NO FREE-FLOATING RULES**: Every derived rule must reference a root cause. Every root cause must affect at least one derived category.
-
-    ### The causal chain
-    Root causes (physics, cosmology, magic) enable or constrain everything else.
-    - Geography & climate follow from the world's physical laws.
-    - Society & culture adapt to geography and operate within root-cause constraints.
-    - Technology solves problems created by geography/physics or exploits a root property.
-    - No category generates rules in isolation.
-
-    ### Specifically avoid
-    - Cliche names, such as Ichor
-    - Dim sun, eternal twilight, eternal fog, black sun
-    - Unexplained atmospheric/lighting conditions (twilight, fog, colored skies) without a root cause
-    - Societies or technologies that contradict the stated environment without an adaptation explanation
-    - "Rule of cool" details that exist in isolation with no causal link to other categories
-    - Multiple independent weird phenomena that don't interact or share a common origin
-    - Technology appearing in a world whose other rules wouldn't support it
-    - Species (elves, dwarves, aliens) in settings where their biology/evolution would make no sense
-
-    {{ _.role("user") }}
-    Create a concept for a {{ type.type }} world type. Draw your inspiration from {{ type.inspiration }}
-
-    {{ ctx.output_format }}
-  "#
-
-}
-
-function GenPlayerCard(type: WorldTypes, concept: WorldRules, narrative: WorldNarrative) -> PlayerCharacterCard {
-    client LoreLLM
+function GenPlayerCard(type: WorldTypes, concept: WorldConcept, narrative: WorldNarrative) -> PlayerCharacterCard {
+    client GenericLoreLLM
     prompt #"
     {{ _.role("system") }}
     You are a talented character creator for a textual RPG game. You create compelling, believable characters that feel native to their world.
@@ -248,7 +339,7 @@ function GenPlayerCard(type: WorldTypes, concept: WorldRules, narrative: WorldNa
     {{ CoreWritingLoreRules() }}
 
     ## Instructions:
-    - Create a character shaped by the given WorldRules — every aspect of them should feel native to this world
+    - Create a character shaped by the given WorldConcept — every aspect of them should feel native to this world
     - The character must have a clear personal motivation that drives them into adventure (a mystery to solve, a person to find, a debt to repay, a calling they can't ignore)
     - Strengths and weaknesses must be concrete and tied to the character's background (not generic)
     - The weakness should create interesting narrative dilemmas (loyalty conflict, dangerous curiosity, a code they won't break) — not just a mechanical deficit
@@ -277,9 +368,9 @@ function GenPlayerCard(type: WorldTypes, concept: WorldRules, narrative: WorldNa
 }
 
 
-function GenNPCCard(type: WorldTypes, concept: WorldRules, narrative: WorldNarrative, player: PlayerCharacterCard) -> PlayerCharacterCard {
+function GenNPCCard(type: WorldTypes, concept: WorldConcept, narrative: WorldNarrative, player: PlayerCharacterCard) -> PlayerCharacterCard {
     // Generates NPC card
-    client LoreLLM
+    client GenericLoreLLM
     prompt #"
     {{ _.role("system") }}
     You are a talented character creator for a textual RPG game. You create compelling, believable characters that feel native to their world.
@@ -288,7 +379,7 @@ function GenNPCCard(type: WorldTypes, concept: WorldRules, narrative: WorldNarra
     {{ CoreWritingLoreRules() }}
 
     ## Instructions:
-    - Create an NPC companion shaped by the given WorldRules — every aspect of them should feel native to this world
+    - Create an NPC companion shaped by the given WorldConcept — every aspect of them should feel native to this world
     - The NPC has their own personality, goals, and motivations — independent from the player character
     - The NPC can compliment, challenge, or even conflict with the player — they are not a sycophant or hanger-on
     - Their strengths and weaknesses should complement the player's, creating interesting party dynamics

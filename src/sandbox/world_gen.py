@@ -1,6 +1,7 @@
 from src.baml_client.async_client import b
-from src.baml_client.types import *
+from src.baml_client.types import WorldTypes
 from src.utils.logger import setup_logging
+from src.agents.world_concept_writer import WorldConceptWriter
 
 import asyncio
 from pprint import pprint
@@ -9,16 +10,12 @@ from loguru import logger
 async def main():
     rules, narrative, player_card, npc_card = None, None, None, None
 
-    # world_type = WorldTypes(type="dystopian dark fantasy",
-    #                         inspiration="Orwell's 1984 totalitarianism meets brutality of Game of Thrones and \
-    #                         horrors of cosmic dread, where ancient curses and forgotten gods twist \
-    #                         the natural order")
-
     world_type = WorldTypes(type="high fantasy",
                             inspiration="Political intrigues of Game of Thrones combined with epic fantasy world")
 
-    logger.info(f"Creating a world rules for {world_type}")
-    rules = await b.GenWorldRules(world_type)
+    logger.info(f"Creating a world concept for {world_type}")
+    concept_writer = WorldConceptWriter(max_iteration=10)
+    rules = await concept_writer.run(world_type)
 
     logger.info(f"Creating the narrative")
     narrative = await b.NarrateWorld(world_type, rules)
@@ -40,5 +37,5 @@ if __name__ == "__main__":
     from dotenv import load_dotenv
 
     load_dotenv()
-    setup_logging()
+    setup_logging(console_level="DEBUG")
     asyncio.run(main())
