@@ -13,4 +13,16 @@ dependencies = [
     "pydantic>=2.12.5",
     "rich>=14.3.2",
     "sqlalchemy>=2.0.46",
+    "poethepoet>=0.32.0"
 ]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.poe.tasks]
+baml-gen = "baml-cli generate --from=src/baml_src"
