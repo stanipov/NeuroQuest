@@ -22,6 +22,25 @@ class WorldNarrative {
 }
 
 
+class WorldNarrativeInconsistency {
+    field string @description("Which field: name, history, or current_state")
+    issue string @description("1-2 short sentences about the narrative problem")
+    fix string @description("1 sentence, 10 words max: how to fix")
+}
+
+
+class WorldNarrativeCritiqueResult {
+    is_satisfied bool
+    feedback WorldNarrativeInconsistency[]
+}
+
+
+class WorldNarrativeGenHistory {
+    draft WorldNarrative
+    critique WorldNarrativeCritiqueResult
+}
+
+
 class WorldConceptInconsistency {
     world_concept string @description("Concept that is inconsistent or logically incorrect")
     inconsistency string @description("1-2 short sentences (10 words each max) about concept inconsistency")
@@ -280,11 +299,14 @@ function WorldConceptCritique(type: WorldTypes, concept: WorldConcept, history: 
 }
 
 
-function NarrateWorld(world_type:WorldTypes, concept: WorldConcept) -> WorldNarrative {
+function NarrateWorld(world_type: WorldTypes, concept: WorldConcept, history: WorldNarrativeGenHistory[]?) -> WorldNarrative {
     // Narrate the world rules into its history and a poetic description
     client NarrateWorldLLM
     prompt #"
     {{ _.role("system") }}
+    You are a creative builder of fictional worlds. You create captivating world for an immersive textual RPG game.
+    Follow these instructions for the creative writing. You always follow formal logic.
+
     {{ CoreWritingLoreRules() }}
 
     ## Strict faithfulness (most important rule):
@@ -298,8 +320,19 @@ function NarrateWorld(world_type:WorldTypes, concept: WorldConcept) -> WorldNarr
     {{ GenresDescription() }}
 
     {{ _.role("user") }}
-    You are given a {{ world_type.type }} world concept. Your task is to generate a narrative from it:
+    Generate an immersive and captivating world for an RPG game so that players would love to live there.
+
+    World type:  {{ world_type.type }}
+    World inspired by: {{ world_type.inspiration }}
+
+    Follow this world concept:
     {{ concept }}
+
+    {% if history %}
+    Previous narrative drafts and critic feedback:
+    {{ history }}
+    Revise to address ALL feedback. Preserve what works, fix what doesn't.
+    {% endif %}
 
     ### `history` — The World's Chronicle (max 10 sentences)
     - A sweeping, cause-and-effect timeline from ancient origins to the present day
@@ -327,6 +360,45 @@ function NarrateWorld(world_type:WorldTypes, concept: WorldConcept) -> WorldNarr
 }
 
 
+function NarrateWorldCritique(concept: WorldConcept, narrative: WorldNarrative, history: WorldNarrativeGenHistory[]?) -> WorldNarrativeCritiqueResult {
+    client LoreLLMCritique
+    prompt #"
+    {{ _.role("system") }}
+    You are a narrative critic.
+    # Task
+    Evaluate the world narrative against its source concept.
+
+    # Check for:
+    1. **Faithfulness** — does the narrative invent details NOT in the concept rules?
+    2. **Terminology drift** — does it rename or paraphrase terms from the rules?
+    3. **Rule coverage** — does every rule category (magic, physics, society, geography, technology) appear in the history?
+    4. **Causal flow** — does current_state logically follow from history?
+    5. **Name derivation** — is the name derived only from terms present in the rules?
+    6. **Show vs tell** — does it use sensory details from the rules rather than abstract summary?
+
+
+    {{ CoreWritingLoreRules() }}
+    {{ LogicalCoherenceLore() }}
+
+    {{ _.role("user") }}
+    World concept:
+    {{ concept }}
+
+    Narrative:
+    {{ narrative }}
+
+    {% if history %}
+    Previous drafts and feedback:
+    {{ history }}
+    Verify previous feedback was addressed. If not, re-include it.
+    {% endif %}
+
+    Evaluate the narrative. If it fully satisfies all requirements — set `is_satisfied` to true and `feedback` to an empty list.
+    If issues exist — set `is_satisfied` to false and provide specific, actionable feedback in `feedback`.
+
+    {{ ctx.output_format }}
+    "#
+}
 
 
 function GenPlayerCard(type: WorldTypes, concept: WorldConcept, narrative: WorldNarrative) -> PlayerCharacterCard {
