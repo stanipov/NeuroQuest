@@ -13,7 +13,8 @@ dependencies = [
     "pydantic>=2.12.5",
     "rich>=14.3.2",
     "sqlalchemy>=2.0.46",
-    "poethepoet>=0.32.0"
+    "poethepoet>=0.32.0",
+    "langgraph>=1.2.9",
 ]
 
 [build-system]

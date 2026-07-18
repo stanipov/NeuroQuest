@@ -1,0 +1,1 @@
+uv run baml-cli generate --from=src/baml_src

@@ -440,6 +440,281 @@ function GenPlayerCard(type: WorldTypes, concept: WorldConcept, narrative: World
 }
 
 
+// =====================================================================================================================
+// Starting Place
+// =====================================================================================================================
+
+class Settlement {
+    name string @description("Name of the settlement (town, city, space port, outpost, etc.)")
+    type string @description("Kind of settlement: town, city, space port, fortress, monastery, mining outpost, village, etc.")
+    description string @description("Sensory description of the settlement, 3-5 sentences")
+    background string @description("Brief history of this settlement, what it's known for, 3-5 sentences")
+}
+
+class SpecificLocation {
+    name string @description("Name of the specific place within the settlement")
+    type string @description("Kind of place: tavern, temple, market, camp, crossroads, ruin, docks, inn, guild hall, plaza, cantina, docking bay, etc.")
+    description string @description("Sensory description of the physical space, 3-5 sentences")
+    atmosphere string @description("Mood, lighting, sounds, smells, 2-3 sentences")
+    notable_features string[] @description("Distinctive landmarks or details a player can interact with, 3-5 items")
+}
+
+class StartingContext {
+    region_name string @description("Name of the broader region (kingdom, star system, province, zone)")
+    region_description string @description("Brief overview of this region, 2-3 sentences")
+    settlement Settlement
+    location SpecificLocation
+}
+
+class CharacterArrangement {
+    player_circumstance string @description("Why the player is here right now, tied to their biography, 2-3 sentences")
+    npc_circumstance string @description("Why the NPC is here right now, tied to their biography, 2-3 sentences")
+    shared_situation string @description("How they know each other or what brings them together, 1-2 sentences")
+}
+
+class OpeningScene {
+    narrative string @description("8-12 sentence narrative opening that sets the scene and hooks the player")
+    immediate_hook string @description("The first thread to pull — a question, problem, or opportunity the player can act on, 1-2 sentences")
+}
+
+class SceneOutput {
+    arrangement CharacterArrangement
+    scene OpeningScene
+}
+
+// Critique types
+
+enum ContextField {
+    Region
+    Settlement
+    SpecificLocation
+}
+
+class ContextCritiqueItem {
+    field ContextField
+    issue string @description("What's wrong, 1-2 sentences")
+    fix string @description("How to fix, 10 words max")
+}
+
+class ContextCritiqueResult {
+    is_satisfied bool
+    feedback ContextCritiqueItem[]
+}
+
+enum SceneField {
+    PlayerCircumstance
+    NpcCircumstance
+    SharedSituation
+    Narrative
+    ImmediateHook
+}
+
+class SceneCritiqueItem {
+    field SceneField
+    issue string @description("What's wrong, 1-2 sentences")
+    fix string @description("How to fix, 10 words max")
+}
+
+class SceneCritiqueResult {
+    is_satisfied bool
+    feedback SceneCritiqueItem[]
+}
+
+class StartingContextGenHistory {
+    draft StartingContext
+    critique ContextCritiqueResult
+}
+
+class StartingSceneGenHistory {
+    arrangement CharacterArrangement
+    scene OpeningScene
+    critique SceneCritiqueResult
+}
+
+// Starting place generation functions
+
+function GenStartingContext(type: WorldTypes, concept: WorldConcept, narrative: WorldNarrative, player: PlayerCharacterCard, npc: PlayerCharacterCard, history: StartingContextGenHistory[]?) -> StartingContext {
+    client GenericLoreLLM
+    prompt #"
+    {{ _.role("system") }}
+    You are a talented world builder for a textual RPG game. You create vivid, specific locations that feel native to their world.
+
+    {{ CoreWritingLoreRules() }}
+
+    ## Instructions:
+    - Generate a starting region, settlement, and specific location where BOTH characters (player and NPC) begin their journey.
+    - The entire output must feel native to the provided WorldConcept and WorldNarrative.
+    - Use the EXACT TERMINOLOGY from the world concept — do not invent synonyms.
+    - The location must have sensory detail: what does the player see, hear, smell, feel?
+    - The settlement's background should tie into the world's history from the WorldNarrative.
+    - The specific location must be a concrete, named place within the settlement.
+    - Avoid cliche location names and tropes.
+
+    ## Specifically avoid
+    - Generic fantasy names (e.g., "The Rusty Nail", "The Silver Moon", etc.)
+    - "You wake up in..." style openings
+    - Characters standing around with no clear reason to be there
+
+    {{ _.role("user") }}
+    World type: {{ type.type }}
+    Inspiration: {{ type.inspiration }}
+
+    World concept:
+    {{ concept }}
+
+    World narrative:
+    {{ narrative }}
+
+    Player character:
+    {{ player }}
+
+    NPC companion:
+    {{ npc }}
+
+    {% if history %}
+    Previous drafts and critique feedback:
+    {{ history }}
+    Revise to address ALL feedback points. Preserve what works, fix what doesn't.
+    {% else %}
+    Generate a starting location context for these two characters.
+    {% endif %}
+
+    {{ ctx.output_format }}
+    "#
+}
+
+function CritiqueStartingContext(concept: WorldConcept, narrative: WorldNarrative, context: StartingContext) -> ContextCritiqueResult {
+    client LoreLLMCritique
+    prompt #"
+    {{ _.role("system") }}
+    You are a meticulous worldbuilding critic.
+
+    Evaluate the starting context against these criteria:
+    1. **World faithfulness** — does the location fit the WorldConcept and WorldNarrative?
+    2. **Terminology** — does it use exact terms from the rules, not invented synonyms?
+    3. **Sensory detail** — is the description vivid and specific, not abstract?
+    4. **Specificity** — is the location concrete and named, not generic?
+    5. **Character fit** — would both the player and NPC plausibly start here?
+    6. **Cliche avoidance** — does it avoid overused tropes and names?
+    7. **Causal grounding** — does the settlement background trace to world rules?
+
+    {{ CoreWritingLoreRules() }}
+    {{ LogicalCoherenceLore() }}
+
+    {{ _.role("user") }}
+    World concept:
+    {{ concept }}
+
+    World narrative:
+    {{ narrative }}
+
+    Starting context:
+    {{ context }}
+
+    Evaluate the context. If it fully satisfies all requirements — set `is_satisfied` to true and `feedback` to an empty list.
+    If issues exist — set `is_satisfied` to false and provide specific, actionable feedback in `feedback`.
+
+    {{ ctx.output_format }}
+    "#
+}
+
+function GenStartingScene(type: WorldTypes, concept: WorldConcept, narrative: WorldNarrative, player: PlayerCharacterCard, npc: PlayerCharacterCard, context: StartingContext, history: StartingSceneGenHistory[]?) -> SceneOutput {
+    client GenericLoreLLM
+    prompt #"
+    {{ _.role("system") }}
+    You are a talented narrative writer for a textual RPG game. You create compelling opening scenes.
+
+    {{ CoreWritingLoreRules() }}
+
+    ## Instructions:
+    - Given the starting context (region, settlement, specific location), write why each character is here and the opening scene.
+    - `player_circumstance`: The player's immediate reason for being at this location. Connect it to their biography, occupation, strengths, and weaknesses. Make it feel personal.
+    - `npc_circumstance`: The NPC's immediate reason for being at this location. Connect it to their biography and personality. The NPC has their OWN reasons — they are not just waiting for the player.
+    - `shared_situation`: How the player and NPC meet or are brought together. Can be coincidence, shared goal, mutual acquaintance, a crisis, etc.
+    - `narrative`: 8-12 sentences. Third person. Establish the sensory moment, show the location, introduce both characters naturally, and build toward the hook.
+    - `immediate_hook`: A concrete question, problem, or opportunity the player can immediately act on. This is the first game decision.
+
+    ### Avoid
+    - "You wake up in..." openings
+    - Characters who are just standing around waiting
+    - Explanatory infodumps — reveal through action and detail
+    - Telling the player what to feel or think
+
+    {{ _.role("user") }}
+    World type: {{ type.type }}
+    Inspiration: {{ type.inspiration }}
+
+    World concept:
+    {{ concept }}
+
+    World narrative:
+    {{ narrative }}
+
+    Player character:
+    {{ player }}
+
+    NPC companion:
+    {{ npc }}
+
+    Starting context:
+    {{ context }}
+
+    {% if history %}
+    Previous drafts and critique feedback:
+    {{ history }}
+    Revise to address ALL feedback points. Preserve what works, fix what doesn't.
+    {% endif %}
+
+    Generate the character arrangement and opening scene.
+
+    {{ ctx.output_format }}
+    "#
+}
+
+function CritiqueStartingScene(concept: WorldConcept, narrative: WorldNarrative, player: PlayerCharacterCard, npc: PlayerCharacterCard, context: StartingContext, arrangement: CharacterArrangement, scene: OpeningScene) -> SceneCritiqueResult {
+    client LoreLLMCritique
+    prompt #"
+    {{ _.role("system") }}
+    You are a narrative critic.
+
+    Evaluate the scene against these criteria:
+    1. **Character faithfulness** — do the circumstances match the characters' biographies and motivations?
+    2. **Believability** — is the shared situation plausible, not contrived?
+    3. **Narrative quality** — is the opening engaging? Does it show rather than tell?
+    4. **Hook** — is the immediate_hook specific and actionable? Can the player act on it right now?
+    5. **Sensory grounding** — does the narrative use the location details from the context?
+    6. **Tone** — does the narrative tone fit the world genre?
+    7. **Cliché avoidance** — no waking-up-openings, no standing-around-waiting?
+
+    {{ _.role("user") }}
+    World concept:
+    {{ concept }}
+
+    World narrative:
+    {{ narrative }}
+
+    Starting context:
+    {{ context }}
+
+    Player character:
+    {{ player }}
+
+    NPC companion:
+    {{ npc }}
+
+    Arrangement:
+    {{ arrangement }}
+
+    Scene:
+    {{ scene }}
+
+    Evaluate. If fully satisfied — set `is_satisfied` to true and `feedback` to an empty list.
+    If issues exist — set `is_satisfied` to false and provide specific, actionable feedback in `feedback`.
+
+    {{ ctx.output_format }}
+    "#
+}
+
 function GenNPCCard(type: WorldTypes, concept: WorldConcept, narrative: WorldNarrative, player: PlayerCharacterCard) -> PlayerCharacterCard {
     // Generates NPC card
     client GenericLoreLLM
