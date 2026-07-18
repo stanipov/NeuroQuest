@@ -19,8 +19,8 @@ from src.baml_client.types import (
 
 class StartingPlaceState(TypedDict):
     world_type: WorldTypes
-    world_concept: WorldConcept
-    world_narrative: WorldNarrative
+    world_concept: NotRequired[WorldConcept]
+    world_narrative: NotRequired[WorldNarrative]
     player_card: PlayerCharacterCard
     npc_card: PlayerCharacterCard
 
@@ -34,8 +34,6 @@ class StartingPlaceState(TypedDict):
     scene_iteration: int
     scene_gen_history: NotRequired[list[StartingSceneGenHistory]]
     scene_feedback: NotRequired[list[SceneCritiqueItem]]
-
-    max_iterations: int
 
 
 async def generate_context_node(state: StartingPlaceState) -> dict:
@@ -65,21 +63,6 @@ async def critique_context_node(state: StartingPlaceState) -> dict:
     history = list(state.get("context_gen_history", []))
     history.append(StartingContextGenHistory(draft=state["context"], critique=result))
     return {"context_feedback": result.feedback, "context_gen_history": history}
-
-
-def route_context(state: StartingPlaceState) -> Literal["generate_context", "generate_scene"]:
-    feedback = state.get("context_feedback", [])
-    iteration = state.get("context_iteration", 0)
-    max_iter = state.get("max_iterations", 5)
-
-    if not feedback:
-        print("[StartingPlace] Location context accepted \u2192 generating scene")
-        return "generate_scene"
-    if iteration >= max_iter:
-        print(f"[StartingPlace] Max context iterations ({max_iter}) reached, proceeding to scene...")
-        return "generate_scene"
-    print(f"[StartingPlace] Revising location context ({iteration}/{max_iter})...")
-    return "generate_context"
 
 
 async def generate_scene_node(state: StartingPlaceState) -> dict:
@@ -126,21 +109,6 @@ async def critique_scene_node(state: StartingPlaceState) -> dict:
     return {"scene_feedback": result.feedback, "scene_gen_history": history}
 
 
-def route_scene(state: StartingPlaceState) -> Literal["generate_scene", "finalize"]:
-    feedback = state.get("scene_feedback", [])
-    iteration = state.get("scene_iteration", 0)
-    max_iter = state.get("max_iterations", 5)
-
-    if not feedback:
-        print("[StartingPlace] Scene accepted \u2192 finalizing")
-        return "finalize"
-    if iteration >= max_iter:
-        print(f"[StartingPlace] Max scene iterations ({max_iter}) reached, finalizing...")
-        return "finalize"
-    print(f"[StartingPlace] Revising scene ({iteration}/{max_iter})...")
-    return "generate_scene"
-
-
 async def finalize_node(state: StartingPlaceState) -> dict:
     print("[StartingPlace] Done!")
     return {
@@ -151,11 +119,39 @@ async def finalize_node(state: StartingPlaceState) -> dict:
 
 
 class StartingPlaceAgent:
-    def __init__(self, max_iterations: int = 5):
-        self.max_iterations = max_iterations
+    def __init__(self, context_max_iterations: int = 5, scene_max_iterations: int = 5):
+        self.context_max = context_max_iterations
+        self.scene_max = scene_max_iterations
         self.graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:
+        context_max = self.context_max
+        scene_max = self.scene_max
+
+        def route_context(state: StartingPlaceState) -> Literal["generate_context", "generate_scene"]:
+            feedback = state.get("context_feedback", [])
+            iteration = state.get("context_iteration", 0)
+            if not feedback:
+                print("[StartingPlace] Location context accepted \u2192 generating scene")
+                return "generate_scene"
+            if iteration >= context_max:
+                print(f"[StartingPlace] Max context iterations ({context_max}) reached, proceeding to scene...")
+                return "generate_scene"
+            print(f"[StartingPlace] Revising location context ({iteration}/{context_max})...")
+            return "generate_context"
+
+        def route_scene(state: StartingPlaceState) -> Literal["generate_scene", "finalize"]:
+            feedback = state.get("scene_feedback", [])
+            iteration = state.get("scene_iteration", 0)
+            if not feedback:
+                print("[StartingPlace] Scene accepted \u2192 finalizing")
+                return "finalize"
+            if iteration >= scene_max:
+                print(f"[StartingPlace] Max scene iterations ({scene_max}) reached, finalizing...")
+                return "finalize"
+            print(f"[StartingPlace] Revising scene ({iteration}/{scene_max})...")
+            return "generate_scene"
+
         graph = StateGraph(StartingPlaceState)
 
         graph.add_node("generate_context", generate_context_node)
