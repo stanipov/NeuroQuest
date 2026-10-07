@@ -15,6 +15,7 @@ dependencies = [
     "sqlalchemy>=2.0.46",
     "poethepoet>=0.32.0",
     "langgraph>=1.2.9",
+    "langgraph-checkpoint-sqlite>=3.1.1",
 ]
 
 [build-system]
@@ -27,3 +28,15 @@ include = ["src*"]
 
 [tool.poe.tasks]
 baml-gen = "baml-cli generate --from=src/baml_src"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.10",
+]

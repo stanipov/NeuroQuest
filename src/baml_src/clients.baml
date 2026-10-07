@@ -104,6 +104,44 @@ client<llm> LoreLLMCritique {
 }
 
 
+client<llm> GameLLM {
+  provider openai-generic
+  retry_policy Constant
+  options {
+    base_url env.BASE_URL
+    api_key env.API_KEY
+    model env.GAME_GENERIC_LLM
+    temperature 0.8
+
+    reasoning_effort:  "medium"
+    chat_template_kwargs {
+      "enable_thinking" true
+      "reasoning_effort"   "medium"
+      "preserve_reasoning" true
+    }
+  }
+}
+
+
+client<llm> GameNarrateLLM {
+  provider openai-generic
+  retry_policy Constant
+  options {
+    base_url env.BASE_URL
+    api_key env.API_KEY
+    model env.GAME_NARRATE_LLM
+    temperature 0.6
+
+    reasoning_effort:  "medium"
+    chat_template_kwargs {
+      "enable_thinking" true
+      "reasoning_effort"   "medium"
+      "preserve_reasoning" true
+    }
+  }
+}
+
+
 // Retry policies
 // https://docs.boundaryml.com/docs/snippets/clients/retry
 retry_policy Constant {
