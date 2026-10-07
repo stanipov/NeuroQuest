@@ -4,7 +4,7 @@ from typing import Literal
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langgraph.config import get_stream_writer
-from langgraph.types import Send
+from langgraph.runtime import Runtime
 
 from src.agents.engine.config import EngineConfig
 from src.agents.engine.state import GameState, turn_actions
@@ -131,13 +131,14 @@ def build_context(state: GameState, cfg: EngineConfig) -> str:
 # ---------------------------------------------------------------------------
 
 
-async def classification(state: GameState, cfg: EngineConfig) -> dict:
+async def classification(state: GameState, runtime: Runtime[EngineConfig]) -> dict:
     """Classify the player's input, bump the turn, and append the input message.
 
     `turn_no` is bumped exactly once per turn and the `HumanMessage` id is
     deterministic per turn, so a retried node overwrites instead of duplicating
     via `add_messages`.
     """
+    cfg = runtime.context
     print(f"[Engine] Classifying input: {state['raw_input']!r}")
     result = await b.ClassifyInput(
         context=build_context(state, cfg),
@@ -159,18 +160,14 @@ async def classification(state: GameState, cfg: EngineConfig) -> dict:
 
 def route_classification(
     state: GameState,
-) -> Literal["game_response", "brief", "narration"] | list[Send]:
+) -> Literal["npc", "game_response", "brief", "narration"]:
     decision = state.get("classification")
     if decision == "clarification":
         return "brief"
     if decision == "invalid":
         return "narration"
-    # valid_action: fan out one NPC task per card, or skip straight to the game
-    # stage. Never return [] - an empty destination list ends the graph.
-    cards = state.get("npc_cards", [])
-    if not cards:
-        return "game_response"
-    return [Send("npc", {**state, "my_card": card}) for card in cards]
+    # valid_action: run the NPC turn, or skip it when there is no NPC card.
+    return "npc" if state.get("npc_cards") else "game_response"
 
 
 def _known_actors(state: GameState) -> set[str]:
@@ -247,8 +244,9 @@ def _apply_state_deltas(state: GameState, deltas: list[StateDelta]) -> dict:
     return out
 
 
-async def game_response(state: GameState, cfg: EngineConfig) -> dict:
+async def game_response(state: GameState, runtime: Runtime[EngineConfig]) -> dict:
     """Sole authority over runtime: inventory, states, and the player's location."""
+    cfg = runtime.context
     print(f"[Engine] Resolving game turn {state.get('turn_no', 0)}")
     result = await b.ResolveGame(
         context=build_context(state, cfg),
@@ -261,8 +259,9 @@ async def game_response(state: GameState, cfg: EngineConfig) -> dict:
     return update
 
 
-async def brief(state: GameState, cfg: EngineConfig) -> dict:
+async def brief(state: GameState, runtime: Runtime[EngineConfig]) -> dict:
     """Answer a clarification question in 1-3 sentences (no narration)."""
+    cfg = runtime.context
     print(f"[Engine] Answering clarification for turn {state.get('turn_no', 0)}")
     answer = await b.AnswerBrief(
         context=build_context(state, cfg),
@@ -287,13 +286,14 @@ def _narration_events(state: GameState, mode: Classification) -> str:
     return "\n".join(part for part in parts if part)
 
 
-async def narration(state: GameState, cfg: EngineConfig) -> dict:
+async def narration(state: GameState, runtime: Runtime[EngineConfig]) -> dict:
     """Render the final turn output and stream it as it is generated.
 
     Narration is the only streaming point: incremental text is emitted through
     `get_stream_writer()` as `{"narration_token": <suffix>}` custom chunks, while
     the node writes the full text and a deterministic `AIMessage` to the state.
     """
+    cfg = runtime.context
     mode = state.get("classification", "invalid")
     turn = state.get("turn_no", 0)
     events = _narration_events(state, mode)

@@ -1,5 +1,5 @@
 from .config import EngineConfig
-from .graph import Engine, NodeFns, build_graph, default_node_fns
+from .graph import Engine, build_graph
 from .nodes import (
     brief,
     build_context,
@@ -8,7 +8,7 @@ from .nodes import (
     narration,
     route_classification,
 )
-from .npc import NpcInput, npc_act
+from .npc import npc_act
 from .serde import build_serde
 from .state import (
     ActorInventory,
@@ -26,14 +26,11 @@ __all__ = [
     "Engine",
     "EngineConfig",
     "GameState",
-    "NodeFns",
-    "NpcInput",
     "brief",
     "build_context",
     "build_graph",
     "build_serde",
     "classification",
-    "default_node_fns",
     "game_response",
     "initial_state",
     "make_npc_msg",

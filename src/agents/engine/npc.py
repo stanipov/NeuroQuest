@@ -1,33 +1,27 @@
 from __future__ import annotations
 
+from langgraph.runtime import Runtime
+
 from src.agents.engine.config import EngineConfig
 from src.agents.engine.nodes import build_context
 from src.agents.engine.state import GameState, make_npc_msg, npc_history
 from src.baml_client.async_client import b
-from src.baml_client.types import PlayerCharacterCard
 
 
-class NpcInput(GameState):
-    """A full-state `Send` payload plus the identity of the acting NPC.
-
-    `my_card` is not a graph channel; it travels only in the `Send` payload and
-    is never written back to the parent state.
-    """
-
-    my_card: PlayerCharacterCard
-
-
-def _npc_history_text(state: NpcInput, name: str, k: int) -> str:
+def _npc_history_text(state: GameState, name: str, k: int) -> str:
     return "\n".join(m.content for m in npc_history(state, name, k=k))
 
 
-async def npc_act(state: NpcInput, cfg: EngineConfig) -> dict:
-    """Decide one NPC's intent; write one deterministic message or nothing.
+async def npc_act(state: GameState, runtime: Runtime[EngineConfig]) -> dict:
+    """Decide the NPC's intent; write one deterministic message or nothing.
 
-    Errors are swallowed: a raised exception in a parallel superstep would fail
-    every branch and discard the whole step's updates.
+    Errors are swallowed so a failing NPC call does not fail the turn.
     """
-    card = state["my_card"]
+    cfg = runtime.context
+    cards = state.get("npc_cards", [])
+    if not cards:
+        return {}
+    card = cards[0]
     turn = state.get("turn_no", 0)
     history = _npc_history_text(state, card.name, cfg.npc_window)
 

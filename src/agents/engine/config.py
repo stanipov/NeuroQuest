@@ -9,7 +9,6 @@ from pydantic import BaseModel
 class EngineConfig(BaseModel):
     history_window: int = 10  # messages passed to game/narration prompts
     npc_window: int = 6  # npc_history window per NPC
-    max_npc_parallelism: int = 4  # LangGraph max_concurrency for NPC fan-out
     sqlite_path: str = "data/engine_checkpoints.db"
 
     @classmethod

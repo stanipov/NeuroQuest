@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 from typing import Self
 from uuid import uuid4
@@ -24,48 +21,24 @@ from src.agents.engine.npc import npc_act
 from src.agents.engine.serde import build_serde
 from src.agents.engine.state import GameState, initial_state
 
-NodeFn = Callable[[GameState], Awaitable[dict]]
 
+def build_graph() -> StateGraph:
+    """Wire the game topology; returns an uncompiled `StateGraph`.
 
-@dataclass
-class NodeFns:
-    """Injectable node bundle (tests replace these with deterministic fakes)."""
+    `EngineConfig` is supplied per run through the graph's runtime context
+    (`context=`), so it is not bound into the node functions here.
+    """
+    graph = StateGraph(GameState, context_schema=EngineConfig)
 
-    classification: NodeFn
-    npc: NodeFn
-    game_response: NodeFn
-    brief: NodeFn
-    narration: NodeFn
-
-
-def default_node_fns(cfg: EngineConfig) -> NodeFns:
-    return NodeFns(
-        classification=partial(classification, cfg=cfg),
-        npc=partial(npc_act, cfg=cfg),
-        game_response=partial(game_response, cfg=cfg),
-        brief=partial(brief, cfg=cfg),
-        narration=partial(narration, cfg=cfg),
-    )
-
-
-def build_graph(cfg: EngineConfig, fns: NodeFns | None = None) -> StateGraph:
-    """Wire the Phase 3 topology; returns an uncompiled `StateGraph`."""
-    fns = fns or default_node_fns(cfg)
-    graph = StateGraph(GameState)
-
-    graph.add_node("classification", fns.classification)
-    graph.add_node("npc", fns.npc)
-    graph.add_node("game_response", fns.game_response)
-    graph.add_node("brief", fns.brief)
-    graph.add_node("narration", fns.narration)
+    graph.add_node("classification", classification)
+    graph.add_node("npc", npc_act)
+    graph.add_node("game_response", game_response)
+    graph.add_node("brief", brief)
+    graph.add_node("narration", narration)
 
     graph.add_edge(START, "classification")
-    graph.add_conditional_edges(
-        "classification",
-        route_classification,
-        ["npc", "game_response", "brief", "narration"],
-    )
-    graph.add_edge("npc", "game_response")  # barrier: wait for all NPC tasks
+    graph.add_conditional_edges("classification", route_classification)
+    graph.add_edge("npc", "game_response")
     graph.add_edge("game_response", "narration")
     graph.add_edge("brief", "narration")
     graph.add_edge("narration", END)
@@ -88,11 +61,9 @@ class Engine:
         config: EngineConfig | None = None,
         *,
         checkpointer: BaseCheckpointSaver | None = None,
-        node_fns: NodeFns | None = None,
     ):
         self.config = config or EngineConfig()
         self._checkpointer = checkpointer
-        self._node_fns = node_fns
         self._conn: aiosqlite.Connection | None = None
         self.graph = None
 
@@ -109,9 +80,7 @@ class Engine:
             saver = AsyncSqliteSaver(self._conn, serde=build_serde())
             await saver.setup()
 
-        self.graph = build_graph(self.config, self._node_fns).compile(
-            checkpointer=saver
-        )
+        self.graph = build_graph().compile(checkpointer=saver)
         return self
 
     async def __aexit__(self, *exc) -> None:
@@ -120,10 +89,7 @@ class Engine:
             self._conn = None
 
     def _cfg(self, thread_id: str) -> dict:
-        return {
-            "configurable": {"thread_id": thread_id},
-            "max_concurrency": self.config.max_npc_parallelism,
-        }
+        return {"configurable": {"thread_id": thread_id}}
 
     async def new_game(self, lore: dict, thread_id: str | None = None) -> str:
         """Seed a fresh thread with lore and return its thread id.
@@ -138,7 +104,9 @@ class Engine:
         return tid
 
     async def turn(self, thread_id: str, raw_input: str) -> GameState:
-        return await self.graph.ainvoke({"raw_input": raw_input}, self._cfg(thread_id))
+        return await self.graph.ainvoke(
+            {"raw_input": raw_input}, self._cfg(thread_id), context=self.config
+        )
 
     async def stream_turn(self, thread_id: str, raw_input: str):
         """Run one turn, yielding `updates` and `custom` stream events.
@@ -153,6 +121,7 @@ class Engine:
             stream_mode=["updates", "custom"],
             version="v2",
             subgraphs=False,
+            context=self.config,
         ):
             yield event
 

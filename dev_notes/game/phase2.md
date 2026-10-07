@@ -1,4 +1,4 @@
-# Game Engine — Phase 2 Implementation Plan
+**# Game Engine — Phase 2 Implementation Plan**
 
 Status: ready to implement.
 Parent specs:
